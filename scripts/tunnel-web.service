@@ -1,0 +1,10 @@
+[Unit]
+Description=Maintain Web Tunnel
+After=network.target
+
+[Service]
+User=mini
+ExecStart=/usr/bin/autossh -i /home/user/.ssh/id_rsa -R 8080:127.0.0.1:8080 -NT user@example.com
+
+[Install]
+WantedBy=multi-user.target
