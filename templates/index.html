@@ -20,8 +20,8 @@
 	<div class="bitcoin-logo"><img src="/static/bitcoin-logo.svg" width="64"/></div>
 	{{range .Users}}
 	{{if $.MultipleUsers }}
-	<a href="/u/{{ . }}">
-	  <button class="submit">{{ . }}@{{$.Domain}}</button>
+	<a class="button-link" href="/u/{{ . }}">
+          <button class="button">{{ . }}@{{$.Domain}}</button>
 	</a>
 	{{else}}
 	<h2 class="address">
@@ -39,7 +39,7 @@
 	    <input class="input" type="text" id="comment" name="comment" disabled>
 	  </div>
 
-	  <button class="open-button">
+	  <button class="button">
 	    Send Sats
 	  </button>
 	</form>

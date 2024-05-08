@@ -63,7 +63,7 @@ body {
   border: 1px solid #999;
 }
 
-.open-button {
+.button {
   width: 480px;
   color: #fff;
   outline: none;
@@ -81,7 +81,11 @@ body {
   background-color: rgba(86, 46, 249, 0.75);
 }
 
-.open-button:hover {
+.button-link {
+  text-decoration: none;
+}
+
+.button:hover {
   background-color: rgba(86, 46, 249, 0.85);
 }
 
@@ -189,7 +193,7 @@ label {
       height: 400px;
   }
 
-  .open-button {
+  .button {
       width: 400px;
   }
 
@@ -226,7 +230,7 @@ label {
       height: 300px;
   }
 
-  .open-button {
+  .button {
       width: 300px;
   }
 
