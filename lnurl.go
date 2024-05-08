@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/fiatjaf/go-lnurl"
 	"github.com/gorilla/mux"
@@ -13,33 +12,11 @@ import (
 
 func handleLNURL(w http.ResponseWriter, r *http.Request) {
 	username := mux.Vars(r)["user"]
+	domain := s.Domain
 
-	domains := getDomains(s.Domain)
-	domain := ""
-
-	if len(domains) == 1 {
-		domain = domains[0]
-	} else {
-		hostname := r.URL.Host
-		if hostname == "" {
-			hostname = r.Host
-		}
-
-		for _, one := range getDomains(s.Domain) {
-			if strings.Contains(hostname, one) {
-				domain = one
-				break
-			}
-		}
-		if domain == "" {
-			json.NewEncoder(w).Encode(lnurl.ErrorResponse("incorrect domain"))
-			return
-		}
-	}
-
-	params, err := GetName(username, domain)
-	if err != nil {
-		log.Error().Err(err).Str("name", username).Str("domain", domain).Msg("failed to get name")
+	params := getParams(username)
+	if params == nil {
+		log.Debug().Str("name", username).Str("domain", domain).Msg("failed to get name")
 		json.NewEncoder(w).Encode(lnurl.ErrorResponse(fmt.Sprintf(
 			"failed to get name %s@%s", username, domain)))
 		return
@@ -74,13 +51,13 @@ func handleLNURL(w http.ResponseWriter, r *http.Request) {
 		})
 
 	} else {
-		msat, err := strconv.Atoi(amount)
+		msat, err := strconv.ParseUint(amount, 10, 64)
 		if err != nil {
 			json.NewEncoder(w).Encode(lnurl.ErrorResponse("amount is not integer"))
 			return
 		}
 
-		bolt11, err := makeInvoice(params, msat, nil)
+		bolt11, err := makeInvoice(params, msat)
 		if err != nil {
 			json.NewEncoder(w).Encode(
 				lnurl.ErrorResponse("failed to create invoice: " + err.Error()))

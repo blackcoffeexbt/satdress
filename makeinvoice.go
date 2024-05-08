@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -16,15 +15,12 @@ func makeMetadata(params *Params) string {
 	metadata, _ = sjson.Set(metadata, "1.0", "text/plain")
 	metadata, _ = sjson.Set(metadata, "1.1", "Satoshis to "+params.Name+"@"+params.Domain+".")
 
-	// TODO support image, custom description
-
 	return metadata
 }
 
 func makeInvoice(
 	params *Params,
-	msat int,
-	pin *string,
+	msat uint64,
 ) (bolt11 string, err error) {
 	// prepare params
 	var backend makeinvoice.BackendParams
@@ -70,19 +66,14 @@ func makeInvoice(
 		Label: params.Domain + "/" + strconv.FormatInt(time.Now().Unix(), 16),
 	}
 
-	if pin != nil {
-		// use this as the description
-		mip.Description = fmt.Sprintf("%s's PIN for '%s@%s' lightning address: %s", params.Domain, params.Name, params.Domain, *pin)
-	} else {
-		// make the lnurlpay description_hash
-		mip.Description = makeMetadata(params)
-		mip.UseDescriptionHash = true
-	}
+	// make the lnurlpay description_hash
+	mip.Description = makeMetadata(params)
+	mip.UseDescriptionHash = true
 
 	// actually generate the invoice
 	bolt11, err = makeinvoice.MakeInvoice(mip)
 
-	log.Debug().Int("msatoshi", msat).
+	log.Debug().Uint64("msatoshi", msat).
 		Interface("backend", backend).
 		Str("bolt11", bolt11).Err(err).
 		Msg("invoice generation")

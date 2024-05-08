@@ -1,0 +1,37 @@
+host: localhost
+port: 8080
+domain: localhost
+siteownername: Satoshi
+siteownerurl: http://localhost
+sitename: Satdress
+
+users:
+  - name: alice
+    kind: commando
+    nodeid: xxx
+    host: xxx
+    rune: xxx
+
+  - name: bob
+    kind: lnd
+    host: xxx
+    macaroon: xxx
+
+  - name: eve
+    kind: eclair
+    host: xxx
+
+  - name: carlos
+    kind: lnpay
+    pak: xxx
+    wak: xxx
+
+  - name: charlie
+    kind: lnbits
+    host: xxx
+    key: xxx
+
+  - name: judy
+    kind: sparko
+    host: xxx
+    key: xxx

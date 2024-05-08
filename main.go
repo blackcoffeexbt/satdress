@@ -2,78 +2,203 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"fmt"
+	"html/template"
+	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/pebble"
+	"github.com/dustin/go-humanize"
 	"github.com/fiatjaf/makeinvoice"
 	"github.com/gorilla/mux"
-	"github.com/kelseyhightower/envconfig"
-	_ "github.com/lib/pq"
+	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/posflag"
+	"github.com/knadh/koanf/v2"
 	"github.com/rs/cors"
 	"github.com/rs/zerolog"
+	flag "github.com/spf13/pflag"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
-type Settings struct {
-	Host   string `envconfig:"HOST" default:"0.0.0.0"`
-	Port   string `envconfig:"PORT" required:"true"`
-	Domain string `envconfig:"DOMAIN" required:"true"`
-	// GlobalUsers means that user@ part is globally unique across all domains
-	// WARNING: if you toggle this existing users won't work anymore for safety reasons!
-	GlobalUsers   bool   `envconfig:"GLOBAL_USERS" required:"false" default:false`
-	Secret        string `envconfig:"SECRET" required:"true"`
-	SiteOwnerName string `envconfig:"SITE_OWNER_NAME" required:"true"`
-	SiteOwnerURL  string `envconfig:"SITE_OWNER_URL" required:"true"`
-	SiteName      string `envconfig:"SITE_NAME" required:"true"`
+type Params struct {
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+	Kind   string `json:"kind"`
 
-	ForceMigrate bool   `envconfig:"FORCE_MIGRATE" required:"false" default:false`
-	TorProxyURL  string `envconfig:"TOR_PROXY_URL"`
+	Host   string `json:"host"`
+	Key    string `json:"key"`
+	Pak    string `json:"pak"`
+	Waki   string `json:"waki"`
+	NodeId string `json:"nodeid"`
+	Rune   string `json:"rune"`
+
+	MinSendable string `json:"minSendable"`
+	MaxSendable string `json:"maxSendable"`
+}
+
+type User struct {
+	Name string `koanf:"name"`
+	Kind string `koanf:"kind"`
+	Host string `koanf:"host"`
+	Key string `koanf:"key"`
+	Pak string `koanf:"pak"`
+	Waki string `koanf:"waki"`
+	NodeId string `koanf:"nodeid"`
+	Rune string `koanf:"rune"`
+}
+
+type Settings struct {
+	Host string `koanf:"host"`
+	Port string `koanf:"port"`
+	Domain string `koanf:"domain"`
+	SiteOwnerName string `koanf:"siteownername"`
+	SiteOwnerURL string `koanf:"siteownerurl"`
+	SiteName string `koanf:"sitename"`
+	TorProxyURL string `koanf:"torproxyurl"`
+	Users []User `koanf:"users"`
 }
 
 var (
-	s      Settings
-	db     *pebble.DB
+	// Configuration & settings.
+	s Settings
+	k = koanf.New(".")
+
+	// Username lookup map.
+	userMap = make(map[string]User)
+
 	router = mux.NewRouter()
 	log    = zerolog.New(os.Stderr).Output(zerolog.ConsoleWriter{Out: os.Stderr})
 )
 
-//go:embed index.html
-var indexHTML string
+//go:embed templates/user.html
+var userHTML string
 
-//go:embed grab.html
-var grabHTML string
+//go:embed templates/invoice.html
+var invoiceHTML string
+
+//go:embed templates/index.html
+var indexHTML string
 
 //go:embed static
 var static embed.FS
 
-func main() {
-	err := envconfig.Process("", &s)
-	if err != nil {
-		log.Fatal().Err(err).Msg("couldn't process envconfig.")
+type Response struct {
+	Ok      bool        `json:"ok"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+func randomString(len int) string {
+	bytes := make([]byte, len)
+
+	for i := 0; i < len; i++ {
+		bytes[i] = byte(randInt(97, 122))
 	}
 
-	// increase default makeinvoice client timeout because people are using tor
+	return string(bytes)
+}
+
+func randInt(min int, max int) int {
+	return min + rand.Intn(max-min)
+}
+
+func sendError(w http.ResponseWriter, code int, msg string, args ...interface{}) {
+	b, _ := json.Marshal(Response{false, fmt.Sprintf(msg, args...), nil})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	w.Write(b)
+}
+
+func getParams(name string) (*Params) {
+	var params Params
+
+	user, ok := userMap[name]
+
+	if ok {
+		params.Name = user.Name
+		params.Domain = s.Domain
+		params.Kind = user.Kind
+		params.Host = user.Host
+		params.Key = user.Key
+		params.Pak = user.Pak
+		params.Waki = user.Waki
+		params.NodeId = user.NodeId
+		params.Rune = user.Rune
+	} else {
+		return nil
+	}
+
+	return &params
+}
+
+func init() {
+    rand.Seed(time.Now().UnixNano())
+}
+
+func main() {
+	cache := expirable.NewLRU[string, string](100, nil, time.Millisecond * 1000 * 10)
+
+	f := flag.NewFlagSet("conf", flag.ContinueOnError)
+	f.Usage = func() {
+		fmt.Println(f.FlagUsages())
+		os.Exit(0)
+	}
+
+	// Path to one or more config files to load into koanf along with some config params.
+	f.StringSlice("conf", []string{"config.yml"}, "path to one or more .yml config files")
+	f.String("host", "0.0.0.0", "the hostname")
+	f.String("port", "8080", "the port")
+	f.Parse(os.Args[1:])
+
+	// Load the config files provided in the commandline.
+	cFiles, _ := f.GetStringSlice("conf")
+	for _, c := range cFiles {
+		if err := k.Load(file.Provider(c), yaml.Parser()); err != nil {
+			log.Fatal().Err(err).Msg("error loading file: %v")
+		}
+	}
+
+	// Override command over the config file.
+	if err := k.Load(posflag.Provider(f, ".", k), nil); err != nil {
+		log.Fatal().Err(err).Msg("error loading config: %v")
+	}
+
+	// Get the settings.
+	k.Unmarshal("", &s)
+
+	// Increase default makeinvoice client timeout for Tor.
 	makeinvoice.Client = &http.Client{Timeout: 25 * time.Second}
 
+	// Lowercase domain.
 	s.Domain = strings.ToLower(s.Domain)
 
 	if s.TorProxyURL != "" {
 		makeinvoice.TorProxyURL = s.TorProxyURL
 	}
 
-	dbName := fmt.Sprintf("%v-multiple.db", s.SiteName)
-	if _, err := os.Stat(dbName); os.IsNotExist(err) || s.ForceMigrate {
-		for _, one := range getDomains(s.Domain) {
-			tryMigrate(one, dbName)
-		}
+	// Load templates.
+	indexTmpl, err := template.New("index").Parse(indexHTML)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error loading template")
+	}
+	userTmpl, err := template.New("user").Parse(userHTML)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error loading template")
+	}
+	invoiceTmpl, err := template.New("invoice").Parse(invoiceHTML)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error loading template")
 	}
 
-	db, err = pebble.Open(dbName, nil)
-	if err != nil {
-		log.Fatal().Err(err).Str("path", dbName).Msg("failed to open db.")
+	// Setup username lookup map.
+	for _, user := range s.Users {
+		userMap[user.Name] = user
 	}
 
 	router.Path("/.well-known/lnurlp/{user}").Methods("GET").
@@ -81,65 +206,173 @@ func main() {
 
 	router.Path("/").HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			renderHTML(w, indexHTML, map[string]interface{}{})
+			data := struct {
+				SiteName string
+				SiteOwnerName string
+				SiteOwnerURL string
+				Domain string
+				Users []string
+				MultipleUsers bool
+			}{
+				SiteName: s.SiteName,
+				SiteOwnerName: s.SiteOwnerName,
+				SiteOwnerURL: s.SiteOwnerURL,
+				Domain: s.Domain,
+				Users: make([]string, len(s.Users)),
+				MultipleUsers: len(s.Users) > 1,
+			}
+
+			for i, user := range s.Users {
+				data.Users[i] = user.Name
+			}
+
+			err = indexTmpl.Execute(w, data)
+			if err != nil {
+				log.Fatal().Err(err).Msg("error executing template")
+			}
 		},
 	)
 
 	router.PathPrefix("/static/").Handler(http.FileServer(http.FS(static)))
 
-	router.Path("/grab").HandlerFunc(
+	router.Path("/u/{name}").Methods("GET").HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
-			name := r.FormValue("name")
-			if name == "" || r.FormValue("kind") == "" {
-				sendError(w, 500, "internal error")
+			name := mux.Vars(r)["name"]
+
+			params := getParams(name)
+			if params == nil {
+				sendError(w, 404, "user not found")
 				return
 			}
 
-			// might not get domain back
-			domain := r.FormValue("domain")
-			if domain == "" {
-				if !strings.Contains(s.Domain, ",") {
-					domain = s.Domain
-				} else {
-					sendError(w, 500, "internal error")
-					return
-				}
+			data := struct {
+				SiteName string
+				SiteOwnerName string
+				SiteOwnerURL string
+				Domain string
+				UserName string
+			}{
+				SiteName: s.SiteName,
+				SiteOwnerName: s.SiteOwnerName,
+				SiteOwnerURL: s.SiteOwnerURL,
+				Domain: s.Domain,
+				UserName: name,
 			}
 
-			pin, inv, err := SaveName(name, domain, &Params{
-				Kind:   r.FormValue("kind"),
-				Host:   r.FormValue("host"),
-				Key:    r.FormValue("key"),
-				Pak:    r.FormValue("pak"),
-				Waki:   r.FormValue("waki"),
-				NodeId: r.FormValue("nodeid"),
-				Rune:   r.FormValue("rune"),
-			}, r.FormValue("pin"))
+			err = userTmpl.Execute(w, data)
 			if err != nil {
-				w.WriteHeader(500)
-				fmt.Fprint(w, err.Error())
-				return
+				sendError(w, 500, "internal error")
+				log.Fatal().Err(err).Msg("error executing template")
 			}
-
-			renderHTML(w, grabHTML, struct {
-				PIN          string `json:"pin"`
-				Invoice      string `json:"invoice"`
-				Name         string `json:"name"`
-				ActualDomain string `json:"actual_domain"`
-			}{pin, inv, name, domain})
 		},
 	)
 
-	api := router.PathPrefix("/api/v1").Subrouter()
-	api.Use(authenticate)
+	router.Path("/u/{name}/qrcode").Methods("GET").HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			name := mux.Vars(r)["name"]
 
-	// unauthenticated
-	api.HandleFunc("/claim", ClaimAddress).Methods("POST")
+			params := getParams(name)
+			if params == nil {
+				sendError(w, 404, "user not found")
+				return
+			}
 
-	// authenticated routes; X-Pin in header or in json request body
-	api.HandleFunc("/users/{name}@{domain}", GetUser).Methods("GET")
-	api.HandleFunc("/users/{name}@{domain}", UpdateUser).Methods("PUT")
-	api.HandleFunc("/users/{name}@{domain}", DeleteUser).Methods("DELETE")
+			var png []byte
+			png, err := qrcode.Encode("lightning:" + name + "@" + s.Domain,
+				qrcode.Medium, 512)
+
+			if err != nil {
+				sendError(w, 500, "internal error")
+				log.Fatal().Err(err).Msg("error encoding qrcode")
+			}
+
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(png)
+		},
+	)
+
+	router.Path("/i/{id}/qrcode").Methods("GET").HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			id := mux.Vars(r)["id"]
+
+			bolt11, ok := cache.Get(id)
+
+			if ok {
+				var png []byte
+				png, err := qrcode.Encode("lightning:" + bolt11,
+					qrcode.Medium, 512)
+
+				if err != nil {
+					sendError(w, 500, "internal error")
+					log.Fatal().Err(err).Msg("error encoding qrcode")
+				}
+
+				w.Header().Set("Content-Type", "image/png")
+				w.Write(png)
+			} else {
+				sendError(w, 404, "invoice not found")
+			}
+		},
+	)
+
+	router.Path("/u/{name}/invoice").Methods("GET").HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			name := mux.Vars(r)["name"]
+			sats, err := strconv.ParseUint(r.URL.Query().Get("sats"), 10, 64)
+
+			if err != nil {
+				sats = 1000
+			}
+
+			msats := sats * 1000
+
+			params := getParams(name)
+			if params == nil {
+				sendError(w, 404, "user not found")
+				return
+			}
+
+			inv, err := makeInvoice(params, msats)
+
+			if err != nil {
+				sendError(w, 503, "couldn't make an invoice")
+				return
+			}
+
+			id := randomString(12)
+
+			cache.Add(id, inv)
+
+			data := struct {
+				SiteName string
+				SiteOwnerName string
+				SiteOwnerURL string
+				Domain string
+				Invoice string
+				UserName string
+				ID string
+				Sats string
+				SatsHuman string
+
+			}{
+				SiteName: s.SiteName,
+				SiteOwnerName: s.SiteOwnerName,
+				SiteOwnerURL: s.SiteOwnerURL,
+				Domain: s.Domain,
+				Invoice: inv,
+				UserName: name,
+				ID: id,
+				Sats: strconv.FormatUint(sats, 10),
+				SatsHuman: humanize.Comma(int64(sats)),
+			}
+
+			err = invoiceTmpl.Execute(w, data)
+			if err != nil {
+				sendError(w, 500, "internal error")
+				log.Fatal().Err(err).Msg("error executing template")
+			}
+		},
+	)
 
 	srv := &http.Server{
 		Handler:      cors.Default().Handler(router),
@@ -148,12 +381,9 @@ func main() {
 		ReadTimeout:  15 * time.Second,
 	}
 	log.Debug().Str("addr", srv.Addr).Msg("listening")
-	srv.ListenAndServe()
-}
+	err = srv.ListenAndServe()
 
-func getDomains(s string) []string {
-	splitFn := func(c rune) bool {
-		return c == ','
+	if err != nil {
+		log.Fatal().Err(err).Msg("error starting server")
 	}
-	return strings.FieldsFunc(s, splitFn)
 }
