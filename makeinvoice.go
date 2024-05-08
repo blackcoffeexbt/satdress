@@ -8,7 +8,7 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-func makeMetadata(params *Params) string {
+func makeMetadata(params *UserParams) string {
 	metadata, _ := sjson.Set("[]", "0.0", "text/identifier")
 	metadata, _ = sjson.Set(metadata, "0.1", params.Name+"@"+params.Domain)
 
@@ -19,11 +19,11 @@ func makeMetadata(params *Params) string {
 }
 
 func makeInvoice(
-	params *Params,
+	params *UserParams,
 	msat uint64,
 ) (bolt11 string, err error) {
 	// prepare params
-	var backend makeinvoice.BackendParams
+	var backend makeinvoice.LNBackendParams
 	switch params.Kind {
 	case "sparko":
 		backend = makeinvoice.SparkoParams{
@@ -64,7 +64,7 @@ func makeInvoice(
 		}
 	}
 
-	mip := makeinvoice.Params{
+	mip := makeinvoice.LNParams{
 		Msatoshi: int64(msat),
 		Backend:  backend,
 

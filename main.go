@@ -26,7 +26,7 @@ import (
 	qrcode "github.com/skip2/go-qrcode"
 )
 
-type Params struct {
+type UserParams struct {
 	Name   string `json:"name"`
 	Domain string `json:"domain"`
 	Kind   string `json:"kind"`
@@ -40,6 +40,16 @@ type Params struct {
 
 	MinSendable string `json:"minSendable"`
 	MaxSendable string `json:"maxSendable"`
+
+	Npub             string `json:"npub"`
+	NotifyZaps       bool   `json:"notifyzaps"`
+	NotifyZapComment bool   `json:"notifycomments"`
+	NotifyNonZap     bool   `json:"notifynonzaps"`
+	Image            struct {
+		DataURI string
+		Bytes   []byte
+		Ext     string
+	}
 }
 
 type User struct {
@@ -62,7 +72,11 @@ type Settings struct {
 	SiteName string `koanf:"sitename"`
 	TorProxyURL string `koanf:"torproxyurl"`
 	Users []User `koanf:"users"`
+	NostrPrivateKey    string `koanf:"nostrprivatekey"`
 }
+
+// array of additional relays
+var Relays []string
 
 var (
 	// Configuration & settings.
@@ -115,8 +129,8 @@ func sendError(w http.ResponseWriter, code int, msg string, args ...interface{})
 	w.Write(b)
 }
 
-func getParams(name string) (*Params) {
-	var params Params
+func getParams(name string) (*UserParams) {
+	var params UserParams
 
 	user, ok := userMap[name]
 

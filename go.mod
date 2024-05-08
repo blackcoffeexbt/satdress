@@ -1,6 +1,8 @@
 module github.com/braydonf/satdress
 
-go 1.18
+go 1.21
+
+toolchain go1.22.0
 
 require (
 	github.com/dustin/go-humanize v1.0.0
@@ -12,10 +14,14 @@ require (
 	github.com/knadh/koanf/providers/file v0.1.0
 	github.com/knadh/koanf/providers/posflag v0.1.0
 	github.com/knadh/koanf/v2 v2.1.0
+	github.com/nbd-wtf/go-nostr v0.30.2
+	github.com/nbd-wtf/ln-decodepay v1.12.1
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
 	github.com/rs/cors v1.10.1
 	github.com/rs/zerolog v1.32.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/spf13/pflag v1.0.5
+	github.com/tidwall/gjson v1.17.1
 	github.com/tidwall/sjson v1.2.5
 )
 
@@ -44,9 +50,13 @@ require (
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.0.0-alpha.1 // indirect
+	github.com/gobwas/httphead v0.1.0 // indirect
+	github.com/gobwas/pool v0.2.1 // indirect
+	github.com/gobwas/ws v1.2.0 // indirect
 	github.com/gorilla/websocket v1.5.1 // indirect
 	github.com/imroc/req v0.3.2 // indirect
 	github.com/jb55/lnsocket/go v0.0.0-20230807153023-0fad35b1352d // indirect
+	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/knadh/koanf/maps v0.1.1 // indirect
 	github.com/lightninglabs/gozmq v0.0.0-20191113021534-d20a764486bf // indirect
@@ -60,16 +70,16 @@ require (
 	github.com/lightningnetwork/lnd/tlv v1.2.3 // indirect
 	github.com/lightningnetwork/lnd/tor v1.1.3 // indirect
 	github.com/lnpay/lnpay-go v1.1.0 // indirect
+	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/miekg/dns v1.1.58 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
-	github.com/nbd-wtf/ln-decodepay v1.12.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/puzpuzpuz/xsync/v3 v3.0.2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
-	github.com/tidwall/gjson v1.17.1 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	golang.org/x/crypto v0.20.0 // indirect

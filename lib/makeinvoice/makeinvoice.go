@@ -32,8 +32,8 @@ var (
 	}
 )
 
-type Params struct {
-	Backend     BackendParams
+type LNParams struct {
+	Backend     LNBackendParams
 	Msatoshi    int64
 	Description string
 
@@ -50,8 +50,8 @@ type CommandoParams struct {
 	NodeId string
 }
 
-func (l CommandoParams) getCert() string { return "" }
-func (l CommandoParams) isTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
+func (l CommandoParams) GetCert() string { return "" }
+func (l CommandoParams) IsTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
 
 type SparkoParams struct {
 	Cert string
@@ -59,8 +59,8 @@ type SparkoParams struct {
 	Key  string
 }
 
-func (l SparkoParams) getCert() string { return l.Cert }
-func (l SparkoParams) isTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
+func (l SparkoParams) GetCert() string { return l.Cert }
+func (l SparkoParams) IsTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
 
 type LNDParams struct {
 	Cert     string
@@ -69,8 +69,8 @@ type LNDParams struct {
 	Private  bool
 }
 
-func (l LNDParams) getCert() string { return l.Cert }
-func (l LNDParams) isTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
+func (l LNDParams) GetCert() string { return l.Cert }
+func (l LNDParams) IsTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
 
 type LNBitsParams struct {
 	Cert string
@@ -78,16 +78,16 @@ type LNBitsParams struct {
 	Key  string
 }
 
-func (l LNBitsParams) getCert() string { return l.Cert }
-func (l LNBitsParams) isTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
+func (l LNBitsParams) GetCert() string { return l.Cert }
+func (l LNBitsParams) IsTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
 
 type LNPayParams struct {
 	PublicAccessKey  string
 	WalletInvoiceKey string
 }
 
-func (l LNPayParams) getCert() string { return "" }
-func (l LNPayParams) isTor() bool     { return false }
+func (l LNPayParams) GetCert() string { return "" }
+func (l LNPayParams) IsTor() bool     { return false }
 
 type EclairParams struct {
 	Host     string
@@ -95,8 +95,8 @@ type EclairParams struct {
 	Cert     string
 }
 
-func (l EclairParams) getCert() string { return l.Cert }
-func (l EclairParams) isTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
+func (l EclairParams) GetCert() string { return l.Cert }
+func (l EclairParams) IsTor() bool     { return strings.Index(l.Host, ".onion") != -1 }
 
 type StrikeParams struct {
 	Key      string
@@ -104,23 +104,23 @@ type StrikeParams struct {
 	Currency string
 }
 
-func (l StrikeParams) getCert() string { return "" }
-func (l StrikeParams) isTor() bool     { return false }
+func (l StrikeParams) GetCert() string { return "" }
+func (l StrikeParams) IsTor() bool     { return false }
 
 type PhoenixParams struct {
        Host     string
        Key      string
 }
 
-func (l PhoenixParams) getCert() string { return "" }
-func (l PhoenixParams) isTor() bool     { return false }
+func (l PhoenixParams) GetCert() string { return "" }
+func (l PhoenixParams) IsTor() bool     { return false }
 
-type BackendParams interface {
-	getCert() string
-	isTor() bool
+type LNBackendParams interface {
+	GetCert() string
+	IsTor() bool
 }
 
-func MakeInvoice(params Params) (bolt11 string, err error) {
+func MakeInvoice(params LNParams) (bolt11 string, err error) {
 	defer func(prevTransport http.RoundTripper) {
 		Client.Transport = prevTransport
 	}(Client.Transport)
@@ -128,16 +128,16 @@ func MakeInvoice(params Params) (bolt11 string, err error) {
 	specialTransport := &http.Transport{}
 
 	// use a cert or skip TLS verification?
-	if params.Backend.getCert() != "" {
+	if params.Backend.GetCert() != "" {
 		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM([]byte(params.Backend.getCert()))
+		caCertPool.AppendCertsFromPEM([]byte(params.Backend.GetCert()))
 		specialTransport.TLSClientConfig = &tls.Config{RootCAs: caCertPool}
 	} else {
 		specialTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
 	// use a tor proxy?
-	if params.Backend.isTor() {
+	if params.Backend.IsTor() {
 		torURL, _ := url.Parse(TorProxyURL)
 		specialTransport.Proxy = http.ProxyURL(torURL)
 	}
