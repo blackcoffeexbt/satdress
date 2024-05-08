@@ -57,6 +57,11 @@ func makeInvoice(
 			NodeId: params.NodeId,
 			Rune:   params.Rune,
 		}
+	case "phoenix":
+		backend = makeinvoice.PhoenixParams{
+			Host:   params.Host,
+			Key: params.Key,
+		}
 	}
 
 	mip := makeinvoice.Params{
