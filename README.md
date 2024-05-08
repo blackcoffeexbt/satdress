@@ -13,6 +13,7 @@ Lightning Address Server
 
 - [x] [Lightning Address](https://github.com/andrerfneves/lightning-address#readme)
 - [ ] [NIP-57](https://github.com/nostr-protocol/nips/blob/master/57.md) (Nostr Lightning Zaps)
+- [ ] [NIP-47](https://github.com/nostr-protocol/nips/blob/master/47.md) (Nostr Wallet Connect)
 
 ## Backends
 
