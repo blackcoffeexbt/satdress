@@ -4,8 +4,14 @@ domain: localhost
 siteownername: Satoshi
 siteownerurl: http://localhost
 sitename: Satdress
+nostrprivatekey: <nsec>
 
 users:
+  - name: alice
+    kind: phoenix
+    host: xxx
+    key: xxx
+
   - name: alice
     kind: commando
     nodeid: xxx
