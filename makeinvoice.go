@@ -21,6 +21,8 @@ func makeMetadata(params *UserParams) string {
 func makeInvoice(
 	params *UserParams,
 	msat uint64,
+	zap string,
+	comment string,
 ) (bolt11 string, err error) {
 	// prepare params
 	var backend makeinvoice.LNBackendParams
@@ -72,8 +74,13 @@ func makeInvoice(
 	}
 
 	// make the lnurlpay description_hash
-	mip.Description = makeMetadata(params)
+
 	mip.UseDescriptionHash = true
+	if zap != "" {
+		mip.Description = zap
+	} else {
+		mip.Description = makeMetadata(params)
+	}
 
 	// actually generate the invoice
 	bolt11, err = makeinvoice.MakeInvoice(mip)

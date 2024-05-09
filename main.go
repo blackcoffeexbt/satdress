@@ -346,7 +346,8 @@ func main() {
 				return
 			}
 
-			inv, err := makeInvoice(params, msats)
+			// TODO add comment for last arg
+			inv, err := makeInvoice(params, msats, "", "")
 
 			if err != nil {
 				sendError(w, 503, "couldn't make an invoice")

@@ -230,7 +230,7 @@ func serveLNURLpSecond(w http.ResponseWriter, params *UserParams, username strin
 	}
 
 	var response LNURLPayValuesCustom
-	invoice, err := makeInvoice(params, amount_msat)
+	invoice, err := makeInvoice(params, amount_msat, zapEventSerializedStr, comment)
 	if err != nil {
 		err = fmt.Errorf("couldn't create invoice: %v", err.Error())
 		response = LNURLPayValuesCustom{
