@@ -183,7 +183,49 @@ func WaitForInvoicePaid(payvalues LNURLPayValuesCustom, params *UserParams) {
 					}
 
 				case makeinvoice.PhoenixParams:
-					//TODO
+
+					client := &http.Client{}
+					url := "http://"+backend.Host+"/payments/incoming/"+bolt11.PaymentHash
+					req, _ := http.NewRequest("GET", url, nil)
+
+					keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+backend.Key))
+
+					req.Header.Add("Authorization", "Basic "+keyb64)
+
+					response, err := client.Do(req)
+
+					if err != nil {
+						fmt.Print(err.Error())
+						return
+					}
+
+					responseData, err := io.ReadAll(response.Body)
+
+					if err != nil {
+						fmt.Print(err.Error())
+						return
+					}
+
+					var jsonMap map[string]interface{}
+					err = json.Unmarshal([]byte(string(responseData)), &jsonMap)
+
+					if err != nil {
+						fmt.Print(err.Error())
+						return
+					}
+
+					if jsonMap["isPaid"].(bool) {
+
+						payvalues.PaidAt = time.Now()
+						fmt.Print("Phoenix says paid..\n")
+						fmt.Print("Payment hash:" + bolt11.PaymentHash + "\n")
+						fmt.Println(string(responseData))
+						payvalues.Paid = true
+
+					} else {
+						fmt.Print("Checking invoice..\n")
+					}
+
 				case makeinvoice.LNPayParams:
 					//TODO
 				case makeinvoice.EclairParams:
