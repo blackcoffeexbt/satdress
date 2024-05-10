@@ -75,10 +75,13 @@ func makeInvoice(
 
 	// make the lnurlpay description_hash
 
-	mip.UseDescriptionHash = true
 	if zap != "" {
 		mip.Description = zap
+	} else if comment != "" {
+		mip.UseDescriptionHash = true
+		mip.Description = comment
 	} else {
+		mip.UseDescriptionHash = true
 		mip.Description = makeMetadata(params)
 	}
 

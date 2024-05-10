@@ -340,14 +340,19 @@ func main() {
 
 			msats := sats * 1000
 
+			comment := r.URL.Query().Get("comment")
+
+			if len(comment) > 639 {
+				comment = ""
+			}
+
 			params := getParams(name)
 			if params == nil {
 				sendError(w, 404, "user not found")
 				return
 			}
 
-			// TODO add comment for last arg
-			inv, err := makeInvoice(params, msats, "", "")
+			inv, err := makeInvoice(params, msats, "", comment)
 
 			if err != nil {
 				sendError(w, 503, "couldn't make an invoice")
