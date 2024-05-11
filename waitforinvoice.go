@@ -99,8 +99,8 @@ func WaitForInvoicePaid(payvalues LNURLPayValuesCustom, params *UserParams) {
 		}
 
 		Client.Transport = specialTransport
-		var maxiterations = 100
-		ticker := time.NewTicker(100 * time.Millisecond)
+		var maxiterations = 34
+		ticker := time.NewTicker(10 * time.Second)
 		quit := make(chan struct{})
 
 		for {

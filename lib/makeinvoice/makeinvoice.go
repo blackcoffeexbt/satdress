@@ -378,17 +378,24 @@ func MakeInvoice(params LNParams) (bolt11 string, err error) {
 		payload := url.Values{}
 
 		if params.Description != "" {
-			payload.Set("description", params.Description)
+			if params.UseDescriptionHash {
+				payload.Set("descriptionHash", hexh)
+			} else {
+				payload.Set("description", params.Description)
+			}
+
 		} else {
 			payload.Set("description", "created by makeinvoice")
 		}
 
 		payload.Add("amountSat", fmt.Sprintf("%d", params.Msatoshi/1000))
 
-		data := bytes.NewBufferString(payload.Encode())
-
 		client := &http.Client{}
-		req, err := http.NewRequest("POST", "http://"+backend.Host+"/createinvoice", data)
+		req, err := http.NewRequest(
+			"POST",
+			"http://"+backend.Host+"/createinvoice",
+			strings.NewReader(payload.Encode()),
+		)
 
 		if err != nil {
 			return "", err
