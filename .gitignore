@@ -3,4 +3,6 @@
 *.yaml
 *.env
 satdress
+satdress-cli
 config.yml
+testdb

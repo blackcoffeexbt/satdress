@@ -5,39 +5,43 @@ siteownername: Satoshi
 siteownerurl: http://localhost
 sitename: Satdress
 nostrprivatekey: <nsec>
+datadir: </abs/path/to/datadir>
 
 users:
-  - name: alice
+  - name: jane
     kind: phoenix
-    host: xxx
-    key: xxx
+    host: <ip:port>
+    key: <hex>
+    nwcpubkey: <hex>
+    nwcsecret: <32-byte-hex>
+    nwcrelay: <wss://host>
 
   - name: alice
     kind: commando
-    nodeid: xxx
-    host: xxx
-    rune: xxx
+    nodeid: <hex>
+    host: <ip:port>
+    rune: <base64>
 
   - name: bob
     kind: lnd
-    host: xxx
-    macaroon: xxx
+    host: <ip:port>
+    macaroon: <macaroon>
 
   - name: eve
     kind: eclair
-    host: xxx
+    host: <ip:port>
 
   - name: carlos
     kind: lnpay
-    pak: xxx
-    wak: xxx
+    pak: <pak>
+    wak: <wak>
 
   - name: charlie
     kind: lnbits
-    host: xxx
-    key: xxx
+    host: <ip:port>
+    key: <key>
 
   - name: judy
     kind: sparko
-    host: xxx
-    key: xxx
+    host: <ip:port>
+    key: <key>

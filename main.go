@@ -1,19 +1,25 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"path/filepath"
 	"math/rand"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/dustin/go-humanize"
 	"github.com/fiatjaf/makeinvoice"
+	nwc "github.com/braydonf/go-nwc"
 	"github.com/gorilla/mux"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/knadh/koanf/parsers/yaml"
@@ -61,6 +67,9 @@ type User struct {
 	Waki string `koanf:"waki"`
 	NodeId string `koanf:"nodeid"`
 	Rune string `koanf:"rune"`
+	NWCPubKey string `koanf:"nwcpubkey"`
+	NWCSecret string `koanf:"nwcsecret"`
+	NWCRelay string `koanf:"nwcrelay"`
 }
 
 type Settings struct {
@@ -73,6 +82,7 @@ type Settings struct {
 	TorProxyURL string `koanf:"torproxyurl"`
 	Users []User `koanf:"users"`
 	NostrPrivateKey    string `koanf:"nostrprivatekey"`
+	DataDir string `koanf:"datadir"`
 }
 
 // array of additional relays
@@ -166,6 +176,7 @@ func main() {
 
 	// Path to one or more config files to load into koanf along with some config params.
 	f.StringSlice("conf", []string{"config.yml"}, "path to one or more .yml config files")
+	f.String("datadir", "/var/lib/lightning-address", "the path (abs.) to the data directory")
 	f.String("host", "0.0.0.0", "the hostname")
 	f.String("port", "8080", "the port")
 	f.Parse(os.Args[1:])
@@ -214,6 +225,54 @@ func main() {
 	for _, user := range s.Users {
 		userMap[user.Name] = user
 	}
+
+	pubkey, err := nostr.GetPublicKey(s.NostrPrivateKey)
+	if err != nil {
+		log.Fatal().Err(err).Msg("unable to get pubkey")
+	}
+
+	log.Info().Str("pubkey", pubkey).Msg("starting nostr with pubkey")
+
+	// Setup NWC daemon.
+
+	absdatadir, err := filepath.Abs(s.DataDir)
+	if err != nil {
+		log.Fatal().Err(err).Msg("absolute path required for datadir")
+	}
+	dbpath := filepath.Join(absdatadir, "nwc.db")
+
+	nwcParams := nwc.NWCParams {
+		PrivateKey: s.NostrPrivateKey,
+		PublicKey: pubkey,
+		Users: make([]nwc.NWCUser, len(s.Users)),
+		Logger: &log,
+		DBPath: dbpath,
+	}
+
+	for i, user := range s.Users {
+		pk, err := nostr.GetPublicKey(user.NWCSecret)
+		if err != nil {
+			log.Fatal().Err(err).Msg("unable to get nwc pubkey")
+		}
+
+		nwcParams.Users[i].Name = user.Name
+		nwcParams.Users[i].PubKey = user.NWCPubKey
+		nwcParams.Users[i].NWCSecret = user.NWCSecret
+		nwcParams.Users[i].NWCSecretPubKey = pk
+		nwcParams.Users[i].Relay = user.NWCRelay
+		nwcParams.Users[i].Kind = user.Kind
+		nwcParams.Users[i].Key = user.Key
+		nwcParams.Users[i].Host = user.Host
+	}
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, os.Kill)
+	defer cancel()
+
+	go nwc.Start(ctx, &nwcParams)
+
+	// TODO Setup API routes for nwc deeplink.
+
+	// Setup API routes.
 
 	router.Path("/.well-known/lnurlp/{user}").Methods("GET").
 		HandlerFunc(handleLNURL)
@@ -394,16 +453,22 @@ func main() {
 		},
 	)
 
-	srv := &http.Server{
-		Handler:      cors.Default().Handler(router),
-		Addr:         s.Host + ":" + s.Port,
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
-	}
-	log.Debug().Str("addr", srv.Addr).Msg("listening")
-	err = srv.ListenAndServe()
+	go func() {
+		srv := &http.Server{
+			Handler:      cors.Default().Handler(router),
+			Addr:         s.Host + ":" + s.Port,
+			WriteTimeout: 15 * time.Second,
+			ReadTimeout:  15 * time.Second,
+		}
 
-	if err != nil {
-		log.Fatal().Err(err).Msg("error starting server")
-	}
+		log.Debug().Str("addr", srv.Addr).Msg("listening")
+
+		err = srv.ListenAndServe()
+
+		if err != nil {
+			log.Fatal().Err(err).Msg("error starting server")
+		}
+	}()
+
+	<-ctx.Done()
 }
