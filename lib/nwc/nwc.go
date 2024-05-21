@@ -32,6 +32,7 @@ const (
 
 	NIP47_ERROR_RATE_LIMITED         = "RATE_LIMITED"
 	NIP47_ERROR_NOT_IMPLEMENTED      = "NOT_IMPLEMENTED"
+	NIP47_ERROR_NOT_FOUND            = "NOT_FOUND"
 	NIP47_ERROR_INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
 	NIP47_ERROR_QUOTA_EXCEEDED       = "QUOTA_EXCEEDED"
 	NIP47_ERROR_RESTRICTED           = "RESTRICTED"
@@ -39,7 +40,7 @@ const (
 	NIP47_ERROR_INTERNAL             = "INTERNAL"
 	NIP47_ERROR_OTHER                = "OTHER"
 
-	NIP47_CAPABILITIES               = "pay_invoice"
+	NIP47_CAPABILITIES               = "pay_invoice get_balance make_invoice lookup_invoice get_info"
 	NIP47_NOTIFICATION_TYPES         = "payment_received" // payment_received, balance_updated, payment_sent, channel_opened, channel_closed
 )
 
@@ -64,6 +65,18 @@ type Nip47PayParams struct {
 	Invoice string `json:"invoice"`
 }
 
+type Nip47LookupInvoiceParams struct {
+	Invoice string `json:"invoice"`
+	PaymentHash string `json:"payment_hash"`
+}
+
+type Nip47InvoiceParams struct {
+	Amount uint64 `json:"amount"`
+	Description string `json:"description"`
+	DescriptionHash string `json:"description_hash"`
+	Expiry uint `json:"expiry"`
+}
+
 type Nip47Error struct {
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -77,6 +90,34 @@ type Nip47Response struct {
 
 type Nip47PayInvoiceResult struct {
 	Preimage string `json:"preimage"`
+}
+
+type Nip47GetBalanceResult struct {
+	Balance uint64 `json:"balance"`
+}
+
+type Nip47InvoiceResult struct {
+	Type string `json:"type"`
+	Invoice string `json:"invoice"`
+	Description string `json:"description"`
+	DescriptionHash string `json:"description_hash"`
+	Preimage string `json:"preimage,omitempty"`
+	PaymentHash string `json:"payment_hash"`
+	Amount uint64 `json:"amount"`
+	FeesPaid uint64 `json:"fees_paid"`
+	CreatedAt uint `json:"created_at"`
+	ExpiresAt uint `json:"expires_at"`
+	SettledAt uint `json:"settled_at"`
+}
+
+type Nip47GetInfoResult struct {
+	Alias string `json:"alias,omitempty"`
+	Color string `json:"color,omitempty"`
+	PubKey string `json:"pubkey"`
+	Network string `json:"network"`
+	BlockHeight uint `json:"block_height,omitempty"`
+	BlockHash string `json:"block_hash,omitempty"`
+	Methods []string `json:"methods"`
 }
 
 type RequestEvent struct {
@@ -210,6 +251,11 @@ func CreateNostrResponse(p *NWCParams, refPubKey string, refID string, content i
 	return resp, nil
 }
 
+func notImplemented() (*Nip47Response, *Nip47Error) {
+
+	return &Nip47Response{}, &Nip47Error{}
+}
+
 func ExecuteRequest(ctx context.Context, db *gorm.DB, p *NWCParams, user *NWCUser, request *RequestEvent) (*ResponseEvent, error) {
 	var backend Backend
 
@@ -257,14 +303,23 @@ func ExecuteRequest(ctx context.Context, db *gorm.DB, p *NWCParams, user *NWCUse
 	case NIP47_PAY_INVOICE_METHOD:
 		nip47Resp, nip47Err = backend.HandlePayInvoice(ctx, *nip47Request)
 	case NIP47_MULTI_PAY_INVOICE_METHOD:
+		nip47Resp, nip47Err = notImplemented()
 	case NIP47_MULTI_PAY_KEYSEND_METHOD:
+		nip47Resp, nip47Err = notImplemented()
 	case NIP47_PAY_KEYSEND_METHOD:
+		nip47Resp, nip47Err = notImplemented()
 	case NIP47_GET_BALANCE_METHOD:
+		nip47Resp, nip47Err = backend.HandleGetBalance(ctx, *nip47Request)
 	case NIP47_MAKE_INVOICE_METHOD:
+		nip47Resp, nip47Err = backend.HandleMakeInvoice(ctx, *nip47Request)
 	case NIP47_LOOKUP_INVOICE_METHOD:
+		nip47Resp, nip47Err = backend.HandleLookupInvoice(ctx, *nip47Request)
 	case NIP47_LIST_TRANSACTIONS_METHOD:
+		nip47Resp, nip47Err = notImplemented()
 	case NIP47_GET_INFO_METHOD:
+		nip47Resp, nip47Err = backend.HandleGetInfo(ctx, *nip47Request)
 	case NIP47_SIGN_MESSAGE_METHOD:
+		nip47Resp, nip47Err = notImplemented()
 	default:
 		nip47Resp, nip47Err = backend.HandleUnknownMethod(ctx, *nip47Request)
 	}
@@ -353,7 +408,6 @@ func GetNip47Info(ctx context.Context, p *NWCParams, relay *nostr.Relay) (*nostr
 	sub.Unsub()
 
 	return &event, nil
-
 }
 
 func PublishResponseEvent(ctx context.Context, p *NWCParams, db *gorm.DB, relay *nostr.Relay, resp *ResponseEvent) error {
@@ -444,7 +498,11 @@ func Start(ctx context.Context, p *NWCParams) {
 		}
 
 		if info != nil {
-			p.Logger.Info().Str("info", info.ID).Msg("received info from relay")
+			if info.Content != NIP47_CAPABILITIES {
+				PublishNip47Info(ctx, p, relay)
+			} else {
+				p.Logger.Info().Str("info", info.ID).Msg("received info from relay")
+			}
 		} else {
 			PublishNip47Info(ctx, p, relay)
 		}

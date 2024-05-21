@@ -171,6 +171,10 @@ func main() {
 				Usage:   "nostr wallet connect commands",
 				Subcommands: []*cli.Command{
 					{
+						// TODO break keygen into
+						// nostr-keygen
+						// nostr-nwc-secret
+						// use options to configure
 						Name:  "keygen",
 						Usage: "create a new nostr private key (32-byte)",
 						Action: keygen,
