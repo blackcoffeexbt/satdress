@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 	"github.com/rs/zerolog"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/file"
@@ -55,6 +56,34 @@ func loadSettings(ctx *cli.Context) {
 	for _, user := range s.Users {
 		userMap[user.Name] = user
 	}
+}
+
+func keygen(ctx *cli.Context) error {
+	privatekey := nostr.GeneratePrivateKey()
+	publickey, err := nostr.GetPublicKey(privatekey)
+
+	if err != nil {
+		return err
+	}
+
+	nsec, err := nip19.EncodePrivateKey(privatekey)
+
+	if err != nil {
+		return err
+	}
+
+	npub, err := nip19.EncodePublicKey(publickey)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("private key: %s\n", privatekey)
+	fmt.Printf("public key: %s\n", publickey)
+	fmt.Printf("nsec: %s\n", nsec)
+	fmt.Printf("npub: %s\n", npub)
+
+	return nil
 }
 
 func connectQRCode(ctx *cli.Context) error {
@@ -141,6 +170,11 @@ func main() {
 				Name:    "nwc",
 				Usage:   "nostr wallet connect commands",
 				Subcommands: []*cli.Command{
+					{
+						Name:  "keygen",
+						Usage: "create a new nostr private key (32-byte)",
+						Action: keygen,
+					},
 					{
 						Name:  "connect-qrcode",
 						Usage: "view nostr wallet connect qrcode",
