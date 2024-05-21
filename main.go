@@ -67,7 +67,6 @@ type User struct {
 	Waki string `koanf:"waki"`
 	NodeId string `koanf:"nodeid"`
 	Rune string `koanf:"rune"`
-	NWCPubKey string `koanf:"nwcpubkey"`
 	NWCSecret string `koanf:"nwcsecret"`
 	NWCRelay string `koanf:"nwcrelay"`
 }
@@ -256,9 +255,8 @@ func main() {
 		}
 
 		nwcParams.Users[i].Name = user.Name
-		nwcParams.Users[i].PubKey = user.NWCPubKey
 		nwcParams.Users[i].NWCSecret = user.NWCSecret
-		nwcParams.Users[i].NWCSecretPubKey = pk
+		nwcParams.Users[i].NWCPubKey = pk
 		nwcParams.Users[i].Relay = user.NWCRelay
 		nwcParams.Users[i].Kind = user.Kind
 		nwcParams.Users[i].Key = user.Key

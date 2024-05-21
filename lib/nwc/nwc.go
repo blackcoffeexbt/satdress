@@ -105,9 +105,8 @@ type ResponseEvent struct {
 
 type NWCUser struct {
 	Name string
-	PubKey string
 	NWCSecret string
-	NWCSecretPubKey	string
+	NWCPubKey string
 	Relay string
 	Kind string
 	Key string
@@ -123,7 +122,7 @@ type NWCParams struct {
 }
 
 func (r *RequestEvent) GetNip47Request(p *NWCParams, user *NWCUser) (*Nip47Request, error) {
-	ss, err := nip04.ComputeSharedSecret(user.NWCSecretPubKey, p.PrivateKey)
+	ss, err := nip04.ComputeSharedSecret(user.NWCPubKey, p.PrivateKey)
 
 	if err != nil {
 		return nil, err
@@ -224,7 +223,7 @@ func ExecuteRequest(ctx context.Context, db *gorm.DB, p *NWCParams, user *NWCUse
 		return nil, fmt.Errorf("unsupported backend: %s", user.Kind)
 	}
 
-	ss, err := nip04.ComputeSharedSecret(user.NWCSecretPubKey, p.PrivateKey)
+	ss, err := nip04.ComputeSharedSecret(user.NWCPubKey, p.PrivateKey)
 
 	if err != nil {
 		return nil, err
@@ -300,8 +299,8 @@ func HandleEvent(db *gorm.DB, p *NWCParams, user *NWCUser, event *nostr.Event) (
 		return nil, nil
 	}
 
-	if user.NWCSecretPubKey != event.PubKey {
-		p.Logger.Warn().Str("pubkey", user.PubKey).Msg("ignoring event, does not match pubkey")
+	if user.NWCPubKey != event.PubKey {
+		p.Logger.Warn().Str("pubkey", user.NWCPubKey).Msg("ignoring event, does not match pubkey")
 		return nil, &Nip47Error{
 			Code: NIP47_ERROR_UNAUTHORIZED,
 			Message: "The public key is not authorized",
@@ -450,11 +449,11 @@ func Start(ctx context.Context, p *NWCParams) {
 			PublishNip47Info(ctx, p, relay)
 		}
 
-		p.Logger.Info().Str("pubkey", user.NWCSecretPubKey).Msg("filtering for requests from pubkey")
+		p.Logger.Info().Str("pubkey", user.NWCPubKey).Msg("filtering for requests from pubkey")
 
 		filters := []nostr.Filter{{
 			Kinds:   []int{NIP47_REQUEST_KIND},
-			Authors: []string{user.NWCSecretPubKey},
+			Authors: []string{user.NWCPubKey},
 			Limit:   1000,
 		}}
 

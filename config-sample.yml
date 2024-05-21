@@ -12,7 +12,6 @@ users:
     kind: phoenix
     host: <ip:port>
     key: <hex>
-    nwcpubkey: <hex>
     nwcsecret: <32-byte-hex>
     nwcrelay: <wss://host>
 
