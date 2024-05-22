@@ -40,7 +40,7 @@ const (
 	NIP47_ERROR_INTERNAL             = "INTERNAL"
 	NIP47_ERROR_OTHER                = "OTHER"
 
-	NIP47_CAPABILITIES               = "pay_invoice get_balance make_invoice lookup_invoice get_info"
+	NIP47_CAPABILITIES               = "pay_invoice get_balance make_invoice lookup_invoice get_info list_transactions"
 	NIP47_NOTIFICATION_TYPES         = "payment_received" // payment_received, balance_updated, payment_sent, channel_opened, channel_closed
 )
 
@@ -70,6 +70,15 @@ type Nip47LookupInvoiceParams struct {
 	PaymentHash string `json:"payment_hash"`
 }
 
+type Nip47ListTransactionsParams struct {
+	From uint `json:"from,omitempty"`
+	Until uint `json:"until,omitempty"`
+	Limit uint `json:"limit,omitempty"`
+	Offset uint `json:"offset,omitempty"`
+	Unpaid bool `json:"unpaid,omitempty"`
+	Type string `json:"type,omitempty"`
+}
+
 type Nip47InvoiceParams struct {
 	Amount uint64 `json:"amount"`
 	Description string `json:"description"`
@@ -96,18 +105,22 @@ type Nip47GetBalanceResult struct {
 	Balance uint64 `json:"balance"`
 }
 
+type Nip47ListTransactionsResult struct {
+	Transactions []Nip47InvoiceResult `json:"transactions"`
+}
+
 type Nip47InvoiceResult struct {
 	Type string `json:"type"`
 	Invoice string `json:"invoice"`
-	Description string `json:"description"`
-	DescriptionHash string `json:"description_hash"`
+	Description string `json:"description,omitempty"`
+	DescriptionHash string `json:"description_hash,omitempty"`
 	Preimage string `json:"preimage,omitempty"`
 	PaymentHash string `json:"payment_hash"`
 	Amount uint64 `json:"amount"`
-	FeesPaid uint64 `json:"fees_paid"`
+	FeesPaid uint64 `json:"fees_paid,omitempty"`
 	CreatedAt uint `json:"created_at"`
-	ExpiresAt uint `json:"expires_at"`
-	SettledAt uint `json:"settled_at"`
+	ExpiresAt uint `json:"expires_at,omitempty"`
+	SettledAt uint `json:"settled_at,omitempty"`
 }
 
 type Nip47GetInfoResult struct {
@@ -228,6 +241,7 @@ func CreateNostrResponse(p *NWCParams, refPubKey string, refID string, content i
 	if err != nil {
 		return nil, err
 	}
+
 	msg, err := nip04.Encrypt(string(payloadBytes), ss)
 	if err != nil {
 		return nil, err
@@ -315,7 +329,7 @@ func ExecuteRequest(ctx context.Context, db *gorm.DB, p *NWCParams, user *NWCUse
 	case NIP47_LOOKUP_INVOICE_METHOD:
 		nip47Resp, nip47Err = backend.HandleLookupInvoice(ctx, *nip47Request)
 	case NIP47_LIST_TRANSACTIONS_METHOD:
-		nip47Resp, nip47Err = notImplemented()
+		nip47Resp, nip47Err = backend.HandleListTransactions(ctx, *nip47Request)
 	case NIP47_GET_INFO_METHOD:
 		nip47Resp, nip47Err = backend.HandleGetInfo(ctx, *nip47Request)
 	case NIP47_SIGN_MESSAGE_METHOD:
@@ -327,10 +341,12 @@ func ExecuteRequest(ctx context.Context, db *gorm.DB, p *NWCParams, user *NWCUse
 	var nostrResp *nostr.Event
 
 	if nip47Err != nil {
+		p.Logger.Warn().Str("method", nip47Request.Method).Str("code", nip47Err.Code).Str("message", nip47Err.Message).Msg("created nip47 error")
 		nostrResp, err = CreateNostrResponse(p, request.PubKey, request.NostrId, Nip47Response{
 			Error: nip47Err,
 		}, nil, ss)
 	} else {
+		p.Logger.Info().Str("result_type", nip47Resp.ResultType).Msg("created nip47 response")
 		nostrResp, err = CreateNostrResponse(p, request.PubKey, request.NostrId, nip47Resp, nil, ss)
 	}
 

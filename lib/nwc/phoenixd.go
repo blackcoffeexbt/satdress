@@ -21,11 +21,25 @@ type PhoenixBalanceResult struct {
 type PhoenixLookupInvoiceResult struct {
 	Invoice string `json:"invoice"`
 	Description string `json:"description"`
+	Fees uint64 `json:"fees,omitempty"`
+	CompleteAt uint `json:"completeAt,omitempty"`
+	CreatedAt uint `json:"createdAt"`
+	Preimage string `json:"preimage,omitempty"`
+	PaymentHash string `json:"paymentHash"`
+}
+
+type PhoenixTransactionResult struct {
+	PaymentHash string `json:"paymentHash"`
+	Preimage string `json:"preimage"`
+	ExternalId string `json:"externalId"`
+	Description string `json:"description"`
+	DescriptionHash string `json:"descriptionHash"`
+	Invoice string `json:"invoice"`
+	IsPaid bool `json:"isPaid"`
+	ReceivedSat uint64 `json:"receivedSat"`
 	Fees uint64 `json:"fees"`
 	CompleteAt uint `json:"completeAt"`
 	CreatedAt uint `json:"createdAt"`
-	Preimage string `json:"preimage"`
-	PaymentHash string `json:"paymentHash"`
 }
 
 type PhoenixInvoiceResult struct {
@@ -46,6 +60,7 @@ type Backend interface {
 	HandleGetBalance(context.Context, Nip47Request) (*Nip47Response, *Nip47Error)
 	HandleMakeInvoice(context.Context, Nip47Request) (*Nip47Response, *Nip47Error)
 	HandleLookupInvoice(context.Context, Nip47Request) (*Nip47Response, *Nip47Error)
+	HandleListTransactions(context.Context, Nip47Request) (*Nip47Response, *Nip47Error)
 	HandleGetInfo(context.Context, Nip47Request) (*Nip47Response, *Nip47Error)
 	HandleUnknownMethod(context.Context, Nip47Request) (*Nip47Response, *Nip47Error)
 }
@@ -113,7 +128,6 @@ func (b *PhoenixBackend) getBalance() (uint64, error) {
 	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
 
 	req.Header.Add("Authorization", "Basic "+keyb64)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -161,7 +175,6 @@ func (b *PhoenixBackend) lookupInvoice(paymentHash string) (*PhoenixLookupInvoic
 	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
 
 	req.Header.Add("Authorization", "Basic "+keyb64)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -271,7 +284,6 @@ func (b *PhoenixBackend) getInfo() (*PhoenixGetInfoResult, error) {
 	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
 
 	req.Header.Add("Authorization", "Basic "+keyb64)
-	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -302,6 +314,70 @@ func (b *PhoenixBackend) getInfo() (*PhoenixGetInfoResult, error) {
 	}
 
 	return &result, nil
+}
+
+func (b *PhoenixBackend) listTransactions(params Nip47ListTransactionsParams) (*[]PhoenixTransactionResult, error) {
+	payload := url.Values{}
+	// unused parameters: offset, externalId
+	if params.From > 0 {
+		payload.Add("from", fmt.Sprintf("%d", params.From * 1000)) // milliseconds
+	}
+
+	if params.Until > 0 {
+		payload.Add("to", fmt.Sprintf("%d", params.Until * 1000)) // milliseconds
+	}
+
+	if params.Limit > 0 {
+		payload.Add("limit", fmt.Sprintf("%d", params.Limit))
+	}
+
+	payload.Add("all", "true")
+
+	client := &http.Client{}
+	req, err := http.NewRequest(
+		"GET",
+		"http://"+b.Host+"/payments/incoming?"+payload.Encode(),
+		nil,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
+
+	req.Header.Add("Authorization", "Basic "+keyb64)
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode >= 300 {
+		body, _ := io.ReadAll(res.Body)
+		text := string(body)
+		if len(text) > 300 {
+			text = text[:300]
+		}
+		return nil, fmt.Errorf("call to phoenix failed (%d): %s", res.StatusCode, text)
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result = []PhoenixTransactionResult{}
+
+	err = json.Unmarshal([]byte(body), &result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+
 }
 
 func (b *PhoenixBackend) HandleGetBalance(ctx context.Context, nip47req Nip47Request) (*Nip47Response, *Nip47Error) {
@@ -376,25 +452,105 @@ func (b *PhoenixBackend) HandleLookupInvoice(ctx context.Context, nip47req Nip47
 		}
 	}
 
+	var expiresAt uint
+	if bolt11.Expiry > 0 {
+		expiresAt = result.CreatedAt + (uint(bolt11.Expiry) * 1000)
+	} else {
+		expiresAt = 0
+	}
+
+	nip47result := Nip47InvoiceResult{
+		Type: "incoming",
+		Invoice: result.Invoice,
+		Description: result.Description,
+		DescriptionHash: bolt11.DescriptionHash,
+		Preimage: result.Preimage,
+		PaymentHash: paymentHash,
+		Amount: uint64(bolt11.MSatoshi),
+		FeesPaid: result.Fees,
+		CreatedAt: result.CreatedAt,
+		SettledAt: result.CompleteAt,
+		// TODO metadata
+	}
+
+	if expiresAt > 0 {
+		nip47result.ExpiresAt = expiresAt
+	}
+
 	response := Nip47Response{
 		ResultType: "lookup_invoice",
-		Result: Nip47InvoiceResult{
-			Type: "incoming",
-			Invoice: result.Invoice,
-			Description: result.Description,
-			DescriptionHash: bolt11.DescriptionHash,
-			Preimage: result.Preimage,
-			PaymentHash: paymentHash,
-			Amount: uint64(bolt11.MSatoshi),
-			FeesPaid: result.Fees,
-			CreatedAt: result.CreatedAt,
-			ExpiresAt: uint(bolt11.Expiry),
-			SettledAt: result.CompleteAt,
-			// TODO metadata
-		},
+		Result: nip47result,
 	}
 
 	return &response, nil
+}
+
+func (b *PhoenixBackend) HandleListTransactions(ctx context.Context, nip47req Nip47Request) (*Nip47Response, *Nip47Error) {
+	var params Nip47ListTransactionsParams
+
+	err := json.Unmarshal(nip47req.Params, &params)
+
+	result, err := b.listTransactions(params)
+
+	if err != nil {
+		return nil, &Nip47Error{
+			Code: NIP47_ERROR_INTERNAL,
+			Message: fmt.Sprintf("could not list transactions (%s)", err),
+		}
+	}
+
+	// TODO include outgoing payments too
+
+	txs := make([]Nip47InvoiceResult, len(*result))
+
+	for i, tx := range *result {
+		bolt11, err := decodepay.Decodepay(tx.Invoice)
+
+		var expiresAt uint
+		if bolt11.Expiry > 0 {
+			expiresAt = tx.CreatedAt + (uint(bolt11.Expiry) * 1000)
+		} else {
+			expiresAt = 0
+		}
+
+		if err != nil {
+			return nil, &Nip47Error{
+				Code: NIP47_ERROR_INTERNAL,
+				Message: "could not decode invoice",
+			}
+		}
+
+		txs[i].Type = "incoming"
+		txs[i].PaymentHash = tx.PaymentHash
+
+		if tx.IsPaid {
+			txs[i].Preimage = tx.Preimage
+		}
+
+		txs[i].Description = tx.Description
+		txs[i].DescriptionHash = bolt11.DescriptionHash
+		txs[i].Invoice = tx.Invoice
+		txs[i].FeesPaid = tx.Fees * 1000 // msats
+		txs[i].Amount = tx.ReceivedSat * 1000 // msats
+		txs[i].CreatedAt = tx.CreatedAt / 1000 // seconds
+
+		if tx.IsPaid {
+			txs[i].SettledAt = tx.CreatedAt / 1000 // seconds
+		}
+
+		if expiresAt > 0 {
+			txs[i].ExpiresAt = expiresAt / 1000 // seconds
+		}
+	}
+
+	response := &Nip47Response{
+		ResultType: "list_transactions",
+		Result: Nip47ListTransactionsResult{
+			Transactions: txs,
+		},
+	}
+
+	return response, nil
 }
 
 func (b *PhoenixBackend) HandleMakeInvoice(ctx context.Context, nip47req Nip47Request) (*Nip47Response, *Nip47Error) {
@@ -421,18 +577,30 @@ func (b *PhoenixBackend) HandleMakeInvoice(ctx context.Context, nip47req Nip47Re
 		}
 	}
 
+	var expiresAt uint
+	if bolt11.Expiry > 0 {
+		expiresAt = uint(bolt11.CreatedAt) + (uint(bolt11.Expiry) * 1000)
+	} else {
+		expiresAt = 0
+	}
+
+	nip47result := Nip47InvoiceResult{
+		Type: "incoming",
+		Invoice: result.Invoice,
+		Description: bolt11.Description,
+		DescriptionHash: bolt11.DescriptionHash,
+		PaymentHash: bolt11.PaymentHash,
+		Amount: uint64(bolt11.MSatoshi),
+		CreatedAt: uint(bolt11.CreatedAt),
+	}
+
+	if expiresAt > 0 {
+		nip47result.ExpiresAt = expiresAt
+	}
+
 	response := &Nip47Response{
 		ResultType: "make_invoice",
-		Result: Nip47InvoiceResult{
-			Type: "incoming",
-			Invoice: result.Invoice,
-			Description: bolt11.Description,
-			DescriptionHash: bolt11.DescriptionHash,
-			PaymentHash: bolt11.PaymentHash,
-			Amount: uint64(bolt11.MSatoshi),
-			CreatedAt: uint(bolt11.CreatedAt),
-			ExpiresAt: uint(bolt11.Expiry),
-		},
+		Result: nip47result,
 	}
 
 	return response, nil
