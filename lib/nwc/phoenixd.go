@@ -14,8 +14,8 @@ import (
 )
 
 type PhoenixBalanceResult struct {
-	Balance uint64 `json:"balanceSat"`
-	FeeCredit uint64 `json:"feeCreditSat"`
+	BalanceSat uint64 `json:"balanceSat"`
+	FeeCreditSat uint64 `json:"feeCreditSat"`
 }
 
 type PhoenixLookupInvoiceResult struct {
@@ -98,7 +98,7 @@ func (b *PhoenixBackend) payInvoice(invoice string) error {
 	return nil
 }
 
-func (b *PhoenixBackend) getBalance() (*uint64, error) {
+func (b *PhoenixBackend) getBalance() (uint64, error) {
 	client := &http.Client{}
 	req, err := http.NewRequest(
 		"GET",
@@ -107,7 +107,7 @@ func (b *PhoenixBackend) getBalance() (*uint64, error) {
 	)
 
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
@@ -117,7 +117,7 @@ func (b *PhoenixBackend) getBalance() (*uint64, error) {
 
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	defer res.Body.Close()
 
@@ -127,12 +127,12 @@ func (b *PhoenixBackend) getBalance() (*uint64, error) {
 		if len(text) > 300 {
 			text = text[:300]
 		}
-		return nil, fmt.Errorf("call to phoenix failed (%d): %s", res.StatusCode, text)
+		return 0, fmt.Errorf("call to phoenix failed (%d): %s", res.StatusCode, text)
 	}
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	var result = PhoenixBalanceResult{}
@@ -140,10 +140,10 @@ func (b *PhoenixBackend) getBalance() (*uint64, error) {
 	err = json.Unmarshal([]byte(body), &result)
 
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	return &result.Balance, nil
+	return result.BalanceSat, nil
 }
 
 func (b *PhoenixBackend) lookupInvoice(paymentHash string) (*PhoenixLookupInvoiceResult, error) {
@@ -306,7 +306,7 @@ func (b *PhoenixBackend) getInfo() (*PhoenixGetInfoResult, error) {
 
 func (b *PhoenixBackend) HandleGetBalance(ctx context.Context, nip47req Nip47Request) (*Nip47Response, *Nip47Error) {
 
-	balance, err := b.getBalance()
+	sats, err := b.getBalance()
 
 	if err != nil {
 		return nil, &Nip47Error{
@@ -315,10 +315,12 @@ func (b *PhoenixBackend) HandleGetBalance(ctx context.Context, nip47req Nip47Req
 		}
 	}
 
+	msats := sats * 1000
+
 	response := Nip47Response{
 		ResultType: "get_balance",
 		Result: Nip47GetBalanceResult{
-			Balance: *balance,
+			Balance: msats,
 		},
 	}
 
