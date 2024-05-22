@@ -150,7 +150,7 @@ func (b *PhoenixBackend) lookupInvoice(paymentHash string) (*PhoenixLookupInvoic
 	client := &http.Client{}
 	req, err := http.NewRequest(
 		"GET",
-		"http://"+b.Host+"/payinvoice/"+paymentHash,
+		"http://"+b.Host+"/payments/incoming/"+paymentHash,
 		nil,
 	)
 

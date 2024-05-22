@@ -395,6 +395,8 @@ func GetNip47Info(ctx context.Context, p *NWCParams, relay *nostr.Relay) (*nostr
 	}}
 
 	sub, err := relay.Subscribe(sctx, filters)
+	defer sub.Unsub()
+
 	if err != nil {
 		return nil, err
 	}
@@ -404,8 +406,6 @@ func GetNip47Info(ctx context.Context, p *NWCParams, relay *nostr.Relay) (*nostr
 	for ev := range sub.Events {
 		event = *ev
 	}
-
-	sub.Unsub()
 
 	return &event, nil
 }
