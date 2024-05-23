@@ -19,27 +19,31 @@ type PhoenixBalanceResult struct {
 }
 
 type PhoenixLookupInvoiceResult struct {
-	Invoice string `json:"invoice"`
-	Description string `json:"description"`
-	Fees uint64 `json:"fees,omitempty"`
 	CompleteAt uint `json:"completeAt,omitempty"`
 	CreatedAt uint `json:"createdAt"`
-	Preimage string `json:"preimage,omitempty"`
+	Description string `json:"description"`
+	DescriptionHash string `json:"descriptionHash"`
+	ExternalId string `json:"externalId"`
+	Fees uint64 `json:"fees,omitempty"`
+	Invoice string `json:"invoice"`
+	IsPaid bool `json:"isPaid"`
 	PaymentHash string `json:"paymentHash"`
+	Preimage string `json:"preimage,omitempty"`
+	ReceivedSat uint64 `json:"receivedSat"`
 }
 
 type PhoenixTransactionResult struct {
-	PaymentHash string `json:"paymentHash"`
-	Preimage string `json:"preimage"`
-	ExternalId string `json:"externalId"`
-	Description string `json:"description"`
-	DescriptionHash string `json:"descriptionHash"`
-	Invoice string `json:"invoice"`
-	IsPaid bool `json:"isPaid"`
-	ReceivedSat uint64 `json:"receivedSat"`
-	Fees uint64 `json:"fees"`
 	CompleteAt uint `json:"completeAt"`
 	CreatedAt uint `json:"createdAt"`
+	Description string `json:"description"`
+	DescriptionHash string `json:"descriptionHash"`
+	ExternalId string `json:"externalId"`
+	Fees uint64 `json:"fees"`
+	Invoice string `json:"invoice"`
+	IsPaid bool `json:"isPaid"`
+	PaymentHash string `json:"paymentHash"`
+	Preimage string `json:"preimage"`
+	ReceivedSat uint64 `json:"receivedSat"`
 }
 
 type PhoenixInvoiceResult struct {
@@ -468,13 +472,16 @@ func (b *PhoenixBackend) HandleLookupInvoice(ctx context.Context, nip47req Nip47
 		PaymentHash: paymentHash,
 		Amount: uint64(bolt11.MSatoshi),
 		FeesPaid: result.Fees,
-		CreatedAt: result.CreatedAt,
-		SettledAt: result.CompleteAt,
+		CreatedAt: result.CreatedAt / 1000, // seconds
 		// TODO metadata
 	}
 
+	if result.IsPaid {
+		nip47result.SettledAt = result.CreatedAt / 1000 // seconds
+	}
+
 	if expiresAt > 0 {
-		nip47result.ExpiresAt = expiresAt
+		nip47result.ExpiresAt = expiresAt / 1000
 	}
 
 	response := Nip47Response{
