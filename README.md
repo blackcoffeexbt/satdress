@@ -15,12 +15,15 @@ Before you begin you'll want to setup a Lighting backend, for example [phoenixd]
 ## Features
 
 - [x] [Lightning Address](https://github.com/andrerfneves/lightning-address#readme)
-- [ ] [NIP-57](https://github.com/nostr-protocol/nips/blob/master/57.md) (Nostr Lightning Zaps)
-- [ ] [NIP-47](https://github.com/nostr-protocol/nips/blob/master/47.md) (Nostr Wallet Connect)
+- [x] [NIP-57](https://github.com/nostr-protocol/nips/blob/master/57.md) (Nostr Lightning Zaps)
+- [x] [NIP-47](https://github.com/nostr-protocol/nips/blob/master/47.md) (Nostr Wallet Connect)
 
 ## Backends
 
+Full support:
 - [x] Phoenix ([phoenixd](https://github.com/ACINQ/phoenixd/))
+
+Limited support:
 - [x] Commando ([Core Lightning](https://github.com/ElementsProject/lightning))
 - [x] Sparko
 - [x] LND
