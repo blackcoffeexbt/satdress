@@ -58,7 +58,7 @@ func loadSettings(ctx *cli.Context) {
 	}
 }
 
-func keygen(ctx *cli.Context) error {
+func createNostrKeys(ctx *cli.Context) error {
 	privatekey := nostr.GeneratePrivateKey()
 	publickey, err := nostr.GetPublicKey(privatekey)
 
@@ -78,10 +78,18 @@ func keygen(ctx *cli.Context) error {
 		return err
 	}
 
-	fmt.Printf("private key: %s\n", privatekey)
-	fmt.Printf("public key: %s\n", publickey)
 	fmt.Printf("nsec: %s\n", nsec)
 	fmt.Printf("npub: %s\n", npub)
+	fmt.Printf("private hex: %s\n", privatekey)
+	fmt.Printf("public hex: %s\n", publickey)
+
+	return nil
+}
+
+func createSecret(ctx *cli.Context) error {
+	privatekey := nostr.GeneratePrivateKey()
+
+	fmt.Printf("secret: %s\n", privatekey)
 
 	return nil
 }
@@ -167,17 +175,18 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
+				Name:  "keygen",
+				Usage: "create a new nostr private and public key (32-byte)",
+				Action: createNostrKeys,
+			},
+			{
 				Name:    "nwc",
 				Usage:   "nostr wallet connect commands",
 				Subcommands: []*cli.Command{
 					{
-						// TODO break keygen into
-						// nostr-keygen
-						// nostr-nwc-secret
-						// use options to configure
-						Name:  "keygen",
-						Usage: "create a new nostr private key (32-byte)",
-						Action: keygen,
+						Name:  "create-secret",
+						Usage: "create a new wallet connection secret (32-byte)",
+						Action: createSecret,
 					},
 					{
 						Name:  "connect-qrcode",
