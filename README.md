@@ -28,6 +28,27 @@ Before you begin you'll want to setup a Lighting backend, for example [phoenixd]
 - [x] LNPay
 - [x] Eclair
 
+## Docker Build
+
+Build the image:
+```bash
+docker build -t satdress .
+```
+
+Notes:
+- The datadir is a docker volume and is mounted at `/var/lib/satdress`.
+- The configuration file is a [docker secret](https://docs.docker.com/engine/swarm/secrets/) and is expected to be mounted at `/run/secrets/satdress.yml`.
+
+Create a secret for the service:
+```bash
+docker secret create satdress.yml ./config.yml
+```
+
+Create and start the service using the secret config:
+```bash
+docker service create --name satdress --secret satdress.yml satdress:latest
+```
+
 ## Screenshots
 
 <img align="left" src="assets/satdress-send.png" width="320"/>
