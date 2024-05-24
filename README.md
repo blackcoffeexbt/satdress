@@ -4,10 +4,10 @@ Lightning Address Server
 
 ## How to run
 
-Before you begin you'll want to setup a Lighting backend, for example [phoenixd](https://github.com/ACINQ/phoenixd/).
+Before you begin you'll want to setup a Lightning backend, for example [phoenixd](https://github.com/ACINQ/phoenixd/).
 
 1. Compile `satdress` and `satdress-cli` by running `make`. This will run `go build` and `go build ./cli/satdress-cli.go`.
-2. Copy and edit the sample config at `config-sample.yml`, you create keys and view other settings with `satdress-cli`.
+2. Copy and edit the sample config at `config-sample.yml`, you can create keys and output wallet connection strings with `satdress-cli`.
 3. Start the app with `./satdress --conf <path/to/config.yml>`.
 4. Copy `satdress` to the system (e.g. `/var/local/bin/satdress`).
 5. Configure, install and enable the daemon scripts (e.g. `scripts/lightning-address.service` to `/etc/systemd/system/lightning-address.service`).
