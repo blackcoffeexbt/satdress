@@ -82,6 +82,7 @@ type Settings struct {
 	Users []User `koanf:"users"`
 	NostrPrivateKey    string `koanf:"nostrprivatekey"`
 	DataDir string `koanf:"datadir"`
+	NWC bool `koanf:"nwc"`
 }
 
 // array of additional relays
@@ -234,39 +235,41 @@ func main() {
 
 	// Setup NWC daemon.
 
-	absdatadir, err := filepath.Abs(s.DataDir)
-	if err != nil {
-		log.Fatal().Err(err).Msg("absolute path required for datadir")
-	}
-	dbpath := filepath.Join(absdatadir, "nwc.db")
-
-	nwcParams := nwc.NWCParams {
-		PrivateKey: s.NostrPrivateKey,
-		PublicKey: pubkey,
-		Users: make([]nwc.NWCUser, len(s.Users)),
-		Logger: &log,
-		DBPath: dbpath,
-	}
-
-	for i, user := range s.Users {
-		pk, err := nostr.GetPublicKey(user.NWCSecret)
-		if err != nil {
-			log.Fatal().Err(err).Msg("unable to get nwc pubkey")
-		}
-
-		nwcParams.Users[i].Name = user.Name
-		nwcParams.Users[i].NWCSecret = user.NWCSecret
-		nwcParams.Users[i].NWCPubKey = pk
-		nwcParams.Users[i].Relay = user.NWCRelay
-		nwcParams.Users[i].Kind = user.Kind
-		nwcParams.Users[i].Key = user.Key
-		nwcParams.Users[i].Host = user.Host
-	}
-
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, os.Kill)
 	defer cancel()
 
-	go nwc.Start(ctx, &nwcParams)
+	if s.NWC {
+		absdatadir, err := filepath.Abs(s.DataDir)
+		if err != nil {
+			log.Fatal().Err(err).Msg("absolute path required for datadir")
+		}
+		dbpath := filepath.Join(absdatadir, "nwc.db")
+
+		nwcParams := nwc.NWCParams {
+			PrivateKey: s.NostrPrivateKey,
+			PublicKey: pubkey,
+			Users: make([]nwc.NWCUser, len(s.Users)),
+			Logger: &log,
+			DBPath: dbpath,
+		}
+
+		for i, user := range s.Users {
+			pk, err := nostr.GetPublicKey(user.NWCSecret)
+			if err != nil {
+				log.Fatal().Err(err).Msg("unable to get nwc pubkey")
+			}
+
+			nwcParams.Users[i].Name = user.Name
+			nwcParams.Users[i].NWCSecret = user.NWCSecret
+			nwcParams.Users[i].NWCPubKey = pk
+			nwcParams.Users[i].Relay = user.NWCRelay
+			nwcParams.Users[i].Kind = user.Kind
+			nwcParams.Users[i].Key = user.Key
+			nwcParams.Users[i].Host = user.Host
+		}
+
+		go nwc.Start(ctx, &nwcParams)
+	}
 
 	// TODO Setup API routes for nwc deeplink.
 

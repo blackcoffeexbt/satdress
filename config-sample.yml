@@ -6,6 +6,7 @@ siteownerurl: http://localhost
 sitename: Satdress
 nostrprivatekey: <nsec>
 datadir: </abs/path/to/datadir>
+nwc: true
 
 users:
   - name: jane
