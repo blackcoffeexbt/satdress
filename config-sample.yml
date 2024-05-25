@@ -1,13 +1,28 @@
+# Server Settings
 host: localhost
 port: 8080
 domain: localhost
 siteownername: Satoshi
 siteownerurl: http://localhost
 sitename: Satdress
-nostrprivatekey: <32-byte-hex>
-datadir: </abs/path/to/datadir>
+
+# Nostr Wallet Connect
+# Additional configuration options `nwcrelay` and `nwcsecret` for
+# the user will need to be added to enable it for specific users.
+# You can use `satdress-cli nwc create-secret` to create new
+# wallet connection secrets. Then use `satdress-cli nwc connect-string`
+# or `satdress-cli nwc connect-qrcode` to connect.
 nwc: true
 
+# Nostr Config
+# This should be a new key specific to this server. You can use
+# the `satdress-cli keygen` tool to create a new key.
+nostrprivatekey: <32-byte-hex>
+
+# NWC Database
+datadir: </abs/path/to/datadir>
+
+# User Configs
 users:
   - name: jane
     kind: phoenix
