@@ -484,6 +484,93 @@ func PublishNip47Info(ctx context.Context, p *NWCParams, relay *nostr.Relay) {
 	p.Logger.Info().Str("event_id", ev.ID).Msg("published info event")
 }
 
+func StartListener(ctx context.Context, db *gorm.DB, p *NWCParams, user NWCUser, pool *nostr.SimplePool, requests chan<- RequestEvent, responses chan<- ResponseEvent) {
+	p.Logger.Info().Str("user", user.Name).Msg("start event worker")
+
+	filters := []nostr.Filter{{
+		Kinds:   []int{NIP47_REQUEST_KIND},
+		Authors: []string{user.NWCPubKey},
+		Limit:   1000,
+	}}
+
+	events := pool.SubMany(ctx, []string{user.Relay}, filters)
+
+	var incoming nostr.IncomingEvent
+
+	for {
+
+		p.Logger.Info().Str("user", user.Name).Msg("waiting for events")
+
+		incoming = <- events
+
+		evt := incoming.Event
+
+		if evt == nil {
+			break
+		}
+
+		revent, nip47err := HandleEvent(db, p, &user, evt)
+
+		if revent != nil && nip47err == nil {
+
+			requests <- *revent
+
+		} else if (nip47err != nil) {
+			ss, err := nip04.ComputeSharedSecret(evt.PubKey, p.PrivateKey)
+
+			if ss != nil {
+				response, err := CreateNostrResponse(p, evt.PubKey, evt.ID, Nip47Response{
+					Error: nip47err,
+				}, nil, ss)
+
+				if response != nil {
+					rsp, _ := CommitResponseEvent(db, p, &user, response, evt.ID)
+					if rsp != nil {
+						responses <- *rsp
+					}
+				} else if err != nil {
+					p.Logger.Warn().Err(err).Msg("unable to create nostr response")
+
+				}
+			} else if err != nil {
+				p.Logger.Warn().Err(err).Msg("unable to compute shared secret")
+			}
+		}
+
+		p.Logger.Info().Str("user", user.Name).Str("event_id", evt.ID).Msg("finished event")
+	}
+}
+
+func StartExecuter(ctx context.Context, db *gorm.DB, p *NWCParams, user NWCUser, requests <-chan RequestEvent, responses chan<- ResponseEvent) {
+	var request RequestEvent
+
+	for {
+		request = <-requests
+
+		response, err := ExecuteRequest(ctx, db, p, &user, &request)
+
+		if err != nil {
+			p.Logger.Warn().Err(err).Msg("unable to execute")
+		} else {
+			responses <- *response
+		}
+	}
+}
+
+func StartPublisher(ctx context.Context, db *gorm.DB, p *NWCParams, relay *nostr.Relay, responses <-chan ResponseEvent) {
+	var response ResponseEvent
+
+	for {
+		response = <-responses
+
+		err := PublishResponseEvent(ctx, p, db, relay, &response)
+
+		if err != nil {
+			p.Logger.Warn().Err(err).Msg("unable to publish")
+		}
+	}
+}
+
 func Start(ctx context.Context, p *NWCParams) {
 	p.Logger.Info().Str("dbpath", p.DBPath).Msg("using database file")
 
@@ -527,96 +614,14 @@ func Start(ctx context.Context, p *NWCParams) {
 
 		p.Logger.Info().Str("pubkey", user.NWCPubKey).Msg("filtering for requests from pubkey")
 
-		filters := []nostr.Filter{{
-			Kinds:   []int{NIP47_REQUEST_KIND},
-			Authors: []string{user.NWCPubKey},
-			Limit:   1000,
-		}}
-
-		events := pool.SubMany(ctx, []string{user.Relay}, filters)
-
 		// TODO query the database for unfinished requests and responses
 		// and then send them to their channels to be completed.
 
-		go func() {
+		go StartListener(ctx, db, p, user, pool, requests, responses)
 
-			p.Logger.Info().Str("user", user.Name).Msg("start event worker")
+		go StartExecuter(ctx, db, p, user, requests, responses)
 
-			var incoming nostr.IncomingEvent
-
-			for {
-
-				p.Logger.Info().Str("user", user.Name).Msg("waiting for events")
-
-				incoming = <- events
-
-				evt := incoming.Event
-
-				if evt == nil {
-					break
-				}
-
-				revent, nip47err := HandleEvent(db, p, &user, evt)
-
-				if revent != nil && nip47err == nil {
-
-					requests <- *revent
-
-				} else if (nip47err != nil) {
-					ss, err := nip04.ComputeSharedSecret(evt.PubKey, p.PrivateKey)
-
-					if ss != nil {
-						response, err := CreateNostrResponse(p, evt.PubKey, evt.ID, Nip47Response{
-							Error: nip47err,
-						}, nil, ss)
-
-						if response != nil {
-							rsp, _ := CommitResponseEvent(db, p, &user, response, evt.ID)
-							if rsp != nil {
-								responses <- *rsp
-							}
-						} else if err != nil {
-							p.Logger.Warn().Err(err).Msg("unable to create nostr response")
-
-						}
-					} else if err != nil {
-						p.Logger.Warn().Err(err).Msg("unable to compute shared secret")
-					}
-				}
-
-				p.Logger.Info().Str("user", user.Name).Str("event_id", evt.ID).Msg("finished event")
-			}
-		}()
-
-		go func() {
-			var request RequestEvent
-
-			for {
-				request = <-requests
-
-				response, err := ExecuteRequest(ctx, db, p, &user, &request)
-
-				if err != nil {
-					p.Logger.Warn().Err(err).Msg("unable to execute")
-				} else {
-					responses <- *response
-				}
-			}
-		}()
-
-		go func() {
-			var response ResponseEvent
-
-			for {
-				response = <-responses
-
-				err := PublishResponseEvent(ctx, p, db, relay, &response)
-
-				if err != nil {
-					p.Logger.Warn().Err(err).Msg("unable to publish")
-				}
-			}
-		}()
+		go StartPublisher(ctx, db, p, relay, responses)
 	}
 
 	<-ctx.Done()
