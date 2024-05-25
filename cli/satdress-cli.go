@@ -58,6 +58,35 @@ func loadSettings(ctx *cli.Context) {
 	}
 }
 
+func viewNostrKeys(ctx *cli.Context) error {
+	nsec := ctx.String("nsec")
+
+	_, privatekey, err := nip19.Decode(nsec)
+
+	if err != nil {
+		return err
+	}
+
+	publickey, err := nostr.GetPublicKey(privatekey.(string))
+
+	if err != nil {
+		return err
+	}
+
+	npub, err := nip19.EncodePublicKey(publickey)
+
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("nsec: %s\n", nsec)
+	fmt.Printf("npub: %s\n", npub)
+	fmt.Printf("private hex: %s\n", privatekey)
+	fmt.Printf("public hex: %s\n", publickey)
+
+	return nil
+}
+
 func createNostrKeys(ctx *cli.Context) error {
 	privatekey := nostr.GeneratePrivateKey()
 	publickey, err := nostr.GetPublicKey(privatekey)
@@ -178,6 +207,18 @@ func main() {
 				Name:  "keygen",
 				Usage: "create a new nostr private and public key (32-byte)",
 				Action: createNostrKeys,
+			},
+			{
+				Name: "keyencoding",
+				Usage: "view the different encodings for a key",
+				Action: viewNostrKeys,
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:  "nsec",
+						Usage: "the nsec key encoding",
+						Required: true,
+					},
+				},
 			},
 			{
 				Name:    "nwc",
