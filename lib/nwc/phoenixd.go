@@ -684,10 +684,15 @@ func (b *PhoenixBackend) HandleListTransactions(ctx context.Context, nip47req Ni
 		return txs[i].CreatedAt > txs[j].CreatedAt
 	})
 
+	max := len(txs) - 1
+	if max + 1 > int(params.Limit) {
+		max = int(params.Limit) - 1
+	}
+
 	response := &Nip47Response{
 		ResultType: "list_transactions",
 		Result: Nip47ListTransactionsResult{
-			Transactions: txs[:params.Limit],
+			Transactions: txs[:max],
 		},
 	}
 
