@@ -4,7 +4,7 @@ domain: localhost
 siteownername: Satoshi
 siteownerurl: http://localhost
 sitename: Satdress
-nostrprivatekey: <nsec>
+nostrprivatekey: <32-byte-hex>
 datadir: </abs/path/to/datadir>
 nwc: true
 
