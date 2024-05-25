@@ -588,6 +588,10 @@ func Start(ctx context.Context, p *NWCParams) {
 
 	for _, user := range p.Users {
 
+		if user.Relay == "" {
+			continue
+		}
+
 		responses := make(chan ResponseEvent)
 		requests := make(chan RequestEvent)
 
