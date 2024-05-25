@@ -9,6 +9,7 @@ import (
 	"io"
 	"fmt"
 	"strings"
+	"sort"
 
 	decodepay "github.com/nbd-wtf/ln-decodepay"
 )
@@ -19,7 +20,7 @@ type PhoenixBalanceResult struct {
 }
 
 type PhoenixLookupInvoiceResult struct {
-	CompleteAt uint `json:"completeAt,omitempty"`
+	CompletedAt uint `json:"completedAt,omitempty"`
 	CreatedAt uint `json:"createdAt"`
 	Description string `json:"description"`
 	DescriptionHash string `json:"descriptionHash"`
@@ -33,7 +34,7 @@ type PhoenixLookupInvoiceResult struct {
 }
 
 type PhoenixTransactionResult struct {
-	CompleteAt uint `json:"completeAt"`
+	CompletedAt uint `json:"completedAt"`
 	CreatedAt uint `json:"createdAt"`
 	Description string `json:"description"`
 	DescriptionHash string `json:"descriptionHash"`
@@ -41,6 +42,7 @@ type PhoenixTransactionResult struct {
 	Fees uint64 `json:"fees"`
 	Invoice string `json:"invoice"`
 	IsPaid bool `json:"isPaid"`
+	Sent uint64 `json:"sent,omitempty"`
 	PaymentHash string `json:"paymentHash"`
 	Preimage string `json:"preimage"`
 	ReceivedSat uint64 `json:"receivedSat"`
@@ -93,6 +95,10 @@ func (b *PhoenixBackend) payInvoice(invoice string) error {
 
 	req.Header.Add("Authorization", "Basic "+keyb64)
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+	// TODO Paying to a hodl invoice (e.g. Zeuspay) will cause this
+	// request to timeout, it could be good to have a better way to
+	// handle this case.
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -335,12 +341,84 @@ func (b *PhoenixBackend) listTransactions(params Nip47ListTransactionsParams) (*
 		payload.Add("limit", fmt.Sprintf("%d", params.Limit))
 	}
 
-	payload.Add("all", "true")
+	if params.Unpaid {
+		payload.Add("all", "true")
+	} else {
+		payload.Add("all", "false")
+	}
 
 	client := &http.Client{}
 	req, err := http.NewRequest(
 		"GET",
 		"http://"+b.Host+"/payments/incoming?"+payload.Encode(),
+		nil,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
+
+	req.Header.Add("Authorization", "Basic "+keyb64)
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode >= 300 {
+		body, _ := io.ReadAll(res.Body)
+		text := string(body)
+		if len(text) > 300 {
+			text = text[:300]
+		}
+		return nil, fmt.Errorf("call to phoenix failed (%d): %s", res.StatusCode, text)
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result = []PhoenixTransactionResult{}
+
+	err = json.Unmarshal([]byte(body), &result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+
+}
+
+func (b *PhoenixBackend) listPayments(params Nip47ListTransactionsParams) (*[]PhoenixTransactionResult, error) {
+	payload := url.Values{}
+	// unused parameters: offset
+	if params.From > 0 {
+		payload.Add("from", fmt.Sprintf("%d", params.From * 1000)) // milliseconds
+	}
+
+	if params.Until > 0 {
+		payload.Add("to", fmt.Sprintf("%d", params.Until * 1000)) // milliseconds
+	}
+
+	if params.Limit > 0 {
+		payload.Add("limit", fmt.Sprintf("%d", params.Limit))
+	}
+
+	if params.Unpaid {
+		payload.Add("all", "true")
+	} else {
+		payload.Add("all", "false")
+	}
+
+	client := &http.Client{}
+	req, err := http.NewRequest(
+		"GET",
+		"http://"+b.Host+"/payments/outgoing?"+payload.Encode(),
 		nil,
 	)
 
@@ -506,19 +584,20 @@ func (b *PhoenixBackend) HandleListTransactions(ctx context.Context, nip47req Ni
 		}
 	}
 
-	// TODO include outgoing payments too
+	payments, err := b.listPayments(params)
 
-	txs := make([]Nip47InvoiceResult, len(*result))
+	if err != nil {
+		return nil, &Nip47Error{
+			Code: NIP47_ERROR_INTERNAL,
+			Message: fmt.Sprintf("could not list payments (%s)", err),
+		}
+	}
+
+	txs := make([]Nip47InvoiceResult, len(*result) + len(*payments))
+	var offset int
 
 	for i, tx := range *result {
 		bolt11, err := decodepay.Decodepay(tx.Invoice)
-
-		var expiresAt uint
-		if bolt11.Expiry > 0 {
-			expiresAt = tx.CreatedAt + (uint(bolt11.Expiry) * 1000)
-		} else {
-			expiresAt = 0
-		}
 
 		if err != nil {
 			return nil, &Nip47Error{
@@ -527,7 +606,15 @@ func (b *PhoenixBackend) HandleListTransactions(ctx context.Context, nip47req Ni
 			}
 		}
 
+		var expiresAt uint
+		if bolt11.Expiry > 0 {
+			expiresAt = tx.CreatedAt + (uint(bolt11.Expiry) * 1000)
+		} else {
+			expiresAt = 0
+		}
+
 		txs[i].Type = "incoming"
+
 		txs[i].PaymentHash = tx.PaymentHash
 
 		if tx.IsPaid {
@@ -542,18 +629,65 @@ func (b *PhoenixBackend) HandleListTransactions(ctx context.Context, nip47req Ni
 		txs[i].CreatedAt = tx.CreatedAt / 1000 // seconds
 
 		if tx.IsPaid {
-			txs[i].SettledAt = tx.CreatedAt / 1000 // seconds
+			txs[i].SettledAt = tx.CompletedAt / 1000 // seconds
 		}
 
 		if expiresAt > 0 {
 			txs[i].ExpiresAt = expiresAt / 1000 // seconds
 		}
+
+		offset += 1
 	}
+
+	for i, payment := range *payments {
+		bolt11, err := decodepay.Decodepay(payment.Invoice)
+
+		if err != nil {
+			return nil, &Nip47Error{
+				Code: NIP47_ERROR_INTERNAL,
+				Message: "could not decode invoice",
+			}
+		}
+
+		var expiresAt uint
+		if bolt11.Expiry > 0 {
+			expiresAt = payment.CreatedAt + (uint(bolt11.Expiry) * 1000)
+		} else {
+			expiresAt = 0
+		}
+
+		txs[offset + i].Type = "outgoing"
+
+		txs[offset + i].PaymentHash = payment.PaymentHash
+
+		if payment.IsPaid {
+			txs[offset + i].Preimage = payment.Preimage
+		}
+
+		txs[offset + i].Description = payment.Description
+		txs[offset + i].DescriptionHash = bolt11.DescriptionHash
+		txs[offset + i].Invoice = payment.Invoice
+		txs[offset + i].FeesPaid = payment.Fees * 1000 // msats
+		txs[offset + i].Amount = payment.Sent * 1000 // msats
+		txs[offset + i].CreatedAt = payment.CreatedAt / 1000 // seconds
+
+		if payment.IsPaid {
+			txs[offset + i].SettledAt = payment.CompletedAt / 1000 // seconds
+		}
+
+		if expiresAt > 0 {
+			txs[offset + i].ExpiresAt = expiresAt / 1000 // seconds
+		}
+	}
+
+	sort.SliceStable(txs, func(i, j int) bool {
+		return txs[i].CreatedAt > txs[j].CreatedAt
+	})
 
 	response := &Nip47Response{
 		ResultType: "list_transactions",
 		Result: Nip47ListTransactionsResult{
-			Transactions: txs,
+			Transactions: txs[:params.Limit],
 		},
 	}
 

@@ -266,8 +266,10 @@ func CreateNostrResponse(p *NWCParams, refPubKey string, refID string, content i
 }
 
 func notImplemented() (*Nip47Response, *Nip47Error) {
-
-	return &Nip47Response{}, &Nip47Error{}
+	return nil, &Nip47Error{
+		Code: NIP47_ERROR_NOT_IMPLEMENTED,
+		Message: "Not implemented.",
+	}
 }
 
 func ExecuteRequest(ctx context.Context, db *gorm.DB, p *NWCParams, user *NWCUser, request *RequestEvent) (*ResponseEvent, error) {
