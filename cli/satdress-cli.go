@@ -60,31 +60,91 @@ func loadSettings(ctx *cli.Context) {
 
 func viewNostrKeys(ctx *cli.Context) error {
 	nsec := ctx.String("nsec")
+	npub := ctx.String("npub")
+	privatehex := ctx.String("private-hex")
+	publichex := ctx.String("public-hex")
 
-	_, privatekey, err := nip19.Decode(nsec)
+	var err error
+	var hex any
+	var prefix string
+
+	if nsec != "" {
+		prefix, hex, err = nip19.Decode(nsec)
+	} else if npub != "" {
+		prefix, hex, err = nip19.Decode(npub)
+	}
 
 	if err != nil {
 		return err
 	}
 
-	publickey, err := nostr.GetPublicKey(privatekey.(string))
+	if prefix == "npub" {
+		fmt.Printf("public hex: %s\n", hex)
 
-	if err != nil {
-		return err
+		return nil
+	} else if prefix == "nsec" {
+		fmt.Printf("private hex: %s\n", hex)
+
+		public, err := nostr.GetPublicKey(hex.(string))
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("public hex: %s\n", public)
+
+		pub, err := nip19.EncodePublicKey(public)
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("npub: %s\n", pub)
+
+		return nil
 	}
 
-	npub, err := nip19.EncodePublicKey(publickey)
+	if privatehex != "" {
+		priv, err := nip19.EncodePrivateKey(privatehex)
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("nsec: %s\n", priv)
+
+		public, err := nostr.GetPublicKey(privatehex)
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("public hex: %s\n", public)
+
+		pub, err := nip19.EncodePublicKey(public)
+
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("npub: %s\n", pub)
+
+		return nil
 	}
 
-	fmt.Printf("nsec: %s\n", nsec)
-	fmt.Printf("npub: %s\n", npub)
-	fmt.Printf("private hex: %s\n", privatekey)
-	fmt.Printf("public hex: %s\n", publickey)
+	if publichex != "" {
+		pub, err := nip19.EncodePublicKey(publichex)
 
-	return nil
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("npub: %s\n", pub)
+
+		return nil
+	}
+
+	return fmt.Errorf("Must supply input.")
 }
 
 func createNostrKeys(ctx *cli.Context) error {
@@ -210,13 +270,24 @@ func main() {
 			},
 			{
 				Name: "keyencoding",
-				Usage: "view the different encodings for a key",
+				Usage: "view a key with different encodings (e.g. nsec, npub, hex)",
 				Action: viewNostrKeys,
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "nsec",
-						Usage: "the nsec key encoding",
-						Required: true,
+						Usage: "the nsec key encoding value",
+					},
+					&cli.StringFlag{
+						Name:  "npub",
+						Usage: "the public key hex encoding value",
+					},
+					&cli.StringFlag{
+						Name:  "private-hex",
+						Usage: "the private key hex encoding value",
+					},
+					&cli.StringFlag{
+						Name:  "public-hex",
+						Usage: "the public key hex encoding value",
 					},
 				},
 			},
