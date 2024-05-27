@@ -83,6 +83,7 @@ type Settings struct {
 	NostrPrivateKey    string `koanf:"nostrprivatekey"`
 	DataDir string `koanf:"datadir"`
 	NWC bool `koanf:"nwc"`
+	LogLevel string `koanf:"loglevel"`
 }
 
 // array of additional relays
@@ -196,6 +197,26 @@ func main() {
 
 	// Get the settings.
 	k.Unmarshal("", &s)
+
+	// Set the log level.
+	if s.LogLevel == "panic" {
+		zerolog.SetGlobalLevel(zerolog.PanicLevel)
+	} else if (s.LogLevel == "fatal") {
+		zerolog.SetGlobalLevel(zerolog.FatalLevel)
+	} else if (s.LogLevel == "error") {
+		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	} else if (s.LogLevel == "warn") {
+		zerolog.SetGlobalLevel(zerolog.WarnLevel)
+	} else if (s.LogLevel == "info") {
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	} else if (s.LogLevel == "debug") {
+		zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	} else if (s.LogLevel == "trace") {
+		zerolog.SetGlobalLevel(zerolog.TraceLevel)
+	} else {
+		log.Warn().Str("loglevel", s.LogLevel).Msg("unknown log level, using 'info'")
+		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	}
 
 	// Increase default makeinvoice client timeout for Tor.
 	makeinvoice.Client = &http.Client{Timeout: 25 * time.Second}
@@ -462,7 +483,7 @@ func main() {
 			ReadTimeout:  15 * time.Second,
 		}
 
-		log.Debug().Str("addr", srv.Addr).Msg("listening")
+		log.Info().Str("addr", srv.Addr).Msg("listening")
 
 		err = srv.ListenAndServe()
 

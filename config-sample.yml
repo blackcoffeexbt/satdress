@@ -6,6 +6,10 @@ siteownername: Satoshi
 siteownerurl: http://localhost
 sitename: Satdress
 
+# Log Level
+# This can be: panic, fatal, error, warn, info, debug, trace
+loglevel: "info"
+
 # Nostr Wallet Connect
 # Additional configuration options `nwcrelay` and `nwcsecret` for
 # the user will need to be added to enable it for specific users.

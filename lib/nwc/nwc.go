@@ -223,6 +223,8 @@ func CommitResponseEvent(db *gorm.DB, p *NWCParams, user *NWCUser, response *nos
 		Status: RESPONSE_EVENT_STATUS_CREATED,
 	}
 
+	p.Logger.Debug().Str("event", response.String()).Msg("saving response event")
+
 	tx := db.Begin()
 	tx.Table("response_events").Create(re)
 	tx.Table("request_events").Where("nostr_id = ?", requestNostrId).Update("status", REQUEST_EVENT_STATUS_DONE)
