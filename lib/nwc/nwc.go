@@ -446,6 +446,31 @@ func PublishResponseEvent(ctx context.Context, p *NWCParams, db *gorm.DB, relay 
 		return err
 	}
 
+	if !relay.IsConnected() {
+		interval := 3 * time.Second
+
+		for {
+			p.Logger.Warn().Str("relay_url", relay.URL).Msg("relay is disconnected, attempting to reconnect")
+
+			r := nostr.NewRelay(context.Background(), relay.URL)
+
+			p.Logger.Info().Str("relay_url", relay.URL).Msg("connecting...")
+
+			err := r.Connect(ctx)
+
+			if err != nil {
+				p.Logger.Warn().Err(err).Int("interval", int(interval)).Msg("unable to connect")
+			} else {
+				p.Logger.Info().Str("relay_url", relay.URL).Msg("connected")
+				*relay = *r
+				break
+			}
+
+			time.Sleep(interval)
+			interval = interval * 17 / 10
+		}
+	}
+
 	err = relay.Publish(ctx, event)
 
 	if err != nil {
