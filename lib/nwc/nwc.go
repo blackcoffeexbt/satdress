@@ -223,7 +223,7 @@ func CommitResponseEvent(db *gorm.DB, p *NWCParams, user *NWCUser, response *nos
 		Status: RESPONSE_EVENT_STATUS_CREATED,
 	}
 
-	p.Logger.Debug().Str("event", response.String()).Msg("saving response event")
+	p.Logger.Trace().Str("event", response.String()).Msg("saving response event")
 
 	tx := db.Begin()
 	tx.Table("response_events").Create(re)
@@ -243,6 +243,8 @@ func CreateNostrResponse(p *NWCParams, refPubKey string, refID string, content i
 	if err != nil {
 		return nil, err
 	}
+
+	p.Logger.Trace().Str("content", string(payloadBytes)).Msg("creating nostr response")
 
 	msg, err := nip04.Encrypt(string(payloadBytes), ss)
 	if err != nil {
