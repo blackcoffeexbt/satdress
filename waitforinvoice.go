@@ -100,7 +100,8 @@ func WaitForInvoicePaid(payvalues LNURLPayValuesCustom, params *UserParams) {
 
 		Client.Transport = specialTransport
 		var maxiterations = 34
-		ticker := time.NewTicker(10 * time.Second)
+		var interval = time.Second
+		ticker := time.NewTicker(interval)
 		quit := make(chan struct{})
 
 		for {
@@ -295,6 +296,9 @@ func WaitForInvoicePaid(payvalues LNURLPayValuesCustom, params *UserParams) {
 					}
 
 				}
+
+				interval = interval * 17 / 10
+				ticker.Reset(interval)
 				maxiterations--
 
 			case <-quit:
