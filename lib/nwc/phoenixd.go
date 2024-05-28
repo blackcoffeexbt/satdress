@@ -19,6 +19,15 @@ type PhoenixBalanceResult struct {
 	FeeCreditSat uint64 `json:"feeCreditSat"`
 }
 
+type PhoenixPayInvoiceResult struct {
+	RecipientAmountSat uint64 `json:"recipientAmountSat"`
+	RoutingFeeSat uint64 `json:"routingFeeSat"`
+	PaymentId string `json:"paymentId"`
+	PaymentPreimage string `json:"paymentPreimage"`
+	PaymentHash string `json:"paymentHash"`
+	UUID string `json:"uuid"`
+}
+
 type PhoenixLookupInvoiceResult struct {
 	CompletedAt uint `json:"completedAt,omitempty"`
 	CreatedAt uint `json:"createdAt"`
@@ -76,7 +85,7 @@ type PhoenixBackend struct {
 	Key string
 }
 
-func (b *PhoenixBackend) payInvoice(invoice string) error {
+func (b *PhoenixBackend) payInvoice(invoice string) (*PhoenixPayInvoiceResult, error) {
 	payload := url.Values{}
 	payload.Set("invoice", invoice)
 
@@ -88,7 +97,7 @@ func (b *PhoenixBackend) payInvoice(invoice string) error {
 	)
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:"+b.Key))
@@ -102,7 +111,7 @@ func (b *PhoenixBackend) payInvoice(invoice string) error {
 
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
 
@@ -112,15 +121,23 @@ func (b *PhoenixBackend) payInvoice(invoice string) error {
 		if len(text) > 300 {
 			text = text[:300]
 		}
-		return fmt.Errorf("call to phoenix failed (%d): %s", res.StatusCode, text)
+		return nil, fmt.Errorf("call to phoenix failed (%d): %s", res.StatusCode, text)
 	}
 
-	_, err = io.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return nil
+	var result = PhoenixPayInvoiceResult{}
+
+	err = json.Unmarshal([]byte(body), &result)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &result, nil
 }
 
 func (b *PhoenixBackend) getBalance() (uint64, error) {
@@ -791,7 +808,7 @@ func (b *PhoenixBackend) HandlePayInvoice(ctx context.Context, nip47req Nip47Req
 		}
 	}
 
-	err = b.payInvoice(params.Invoice)
+	result, err := b.payInvoice(params.Invoice)
 
 	if err != nil {
 		return nil, &Nip47Error{
@@ -803,8 +820,7 @@ func (b *PhoenixBackend) HandlePayInvoice(ctx context.Context, nip47req Nip47Req
 	response := Nip47Response{
 		ResultType: "pay_invoice",
 		Result: Nip47PayInvoiceResult{
-			// TODO include preimage from phoenixd
-			Preimage: "preimageplaceholder",
+			Preimage: result.PaymentPreimage,
 		},
 	}
 
