@@ -570,33 +570,62 @@ func StartListener(ctx context.Context, db *gorm.DB, p *NWCParams, user NWCUser,
 	}
 }
 
-func StartExecuter(ctx context.Context, db *gorm.DB, p *NWCParams, user NWCUser, requests <-chan RequestEvent, responses chan<- ResponseEvent) {
-	var request RequestEvent
+func ExecuteRequestBacklog(ctx context.Context, db *gorm.DB, p *NWCParams, user NWCUser, responses chan<- ResponseEvent) {
+	var requests []RequestEvent
 
-	for {
-		request = <-requests
+	result := db.Table("request_events").Where("user = ?", user.Name).Where("status = ?", REQUEST_EVENT_STATUS_RECEIVED).Find(&requests)
+
+	if result.RowsAffected == 0 {
+		return
+	}
+
+	for _, request := range requests {
+		p.Logger.Info().Str("request_nostr_id", request.NostrId).Msg("request backlog")
 
 		response, err := ExecuteRequest(ctx, db, p, &user, &request)
 
 		if err != nil {
-			p.Logger.Warn().Err(err).Msg("unable to execute")
+			p.Logger.Warn().Err(err).Msg("unable to execute backlog")
 		} else {
 			responses <- *response
 		}
 	}
 }
 
-func StartPublisher(ctx context.Context, db *gorm.DB, p *NWCParams, relay *nostr.Relay, responses <-chan ResponseEvent) {
-	var response ResponseEvent
-
+func StartExecuter(ctx context.Context, db *gorm.DB, p *NWCParams, user NWCUser, requests <-chan RequestEvent, responses chan<- ResponseEvent) {
 	for {
-		response = <-responses
+		ExecuteRequestBacklog(ctx, db, p, user, responses)
+
+		_ = <-requests
+	}
+}
+
+func PublishResponseBacklog(ctx context.Context, db *gorm.DB, p *NWCParams, relay *nostr.Relay, user NWCUser) {
+	var responses []ResponseEvent
+
+	result := db.Table("response_events").Where("user = ?", user.Name).Where("status = ?", RESPONSE_EVENT_STATUS_CREATED).Find(&responses)
+
+	if result.RowsAffected == 0 {
+		return
+	}
+
+	for _, response := range responses {
+		p.Logger.Info().Str("response_nostr_id", response.NostrId).Msg("response backlog")
 
 		err := PublishResponseEvent(ctx, p, db, relay, &response)
 
 		if err != nil {
-			p.Logger.Warn().Err(err).Msg("unable to publish")
+			p.Logger.Warn().Err(err).Msg("unable to publish backlog")
 		}
+	}
+}
+
+func StartPublisher(ctx context.Context, db *gorm.DB, p *NWCParams, relay *nostr.Relay, user NWCUser, responses <-chan ResponseEvent) {
+
+	for {
+		PublishResponseBacklog(ctx, db, p, relay, user)
+
+		_ = <-responses
 	}
 }
 
@@ -647,14 +676,11 @@ func Start(ctx context.Context, p *NWCParams) {
 
 		p.Logger.Info().Str("pubkey", user.NWCPubKey).Msg("filtering for requests from pubkey")
 
-		// TODO query the database for unfinished requests and responses
-		// and then send them to their channels to be completed.
-
 		go StartListener(ctx, db, p, user, pool, requests, responses)
 
 		go StartExecuter(ctx, db, p, user, requests, responses)
 
-		go StartPublisher(ctx, db, p, relay, responses)
+		go StartPublisher(ctx, db, p, relay, user, responses)
 	}
 
 	<-ctx.Done()
