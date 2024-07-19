@@ -189,30 +189,55 @@ func (b *PhoenixBackend) getBalance() (uint64, error) {
 }
 
 func (b *PhoenixBackend) lookupInvoice(paymentHash string) (*PhoenixLookupInvoiceResult, error) {
-    // Try to find the invoice in outgoing payments first
-    result, err := b.lookupOutgoingInvoice(paymentHash)
+    // Try to find the invoice in incoming payments first
+    result, err := b.lookupIncomingInvoice(paymentHash)
     if err != nil {
+        if result == nil && err.Error() == "not found" {
+            return b.lookupOutgoingInvoice(paymentHash)
+        }
         return nil, err
-    }
-    if result != nil {
+    } else if result != nil {
         return result, nil
     }
 
-    // If not found in outgoing, try incoming payments
-    return b.lookupIncomingInvoice(paymentHash)
-}
-
-func (b *PhoenixBackend) lookupOutgoingInvoice(paymentHash string) (*PhoenixLookupInvoiceResult, error) {
-    return b.lookupPayment("outgoing", paymentHash)
+    return nil, fmt.Errorf("unexpected error in lookupInvoice")
 }
 
 func (b *PhoenixBackend) lookupIncomingInvoice(paymentHash string) (*PhoenixLookupInvoiceResult, error) {
-    return b.lookupPayment("incoming", paymentHash)
+    url := "http://" + b.Host + "/payments/incoming/" + paymentHash
+    req, err := http.NewRequest("GET", url, nil)
+    if err != nil {
+        return nil, err
+    }
+
+	keyb64 := base64.StdEncoding.EncodeToString([]byte("phoenix-cli:" + b.Key))
+    req.Header.Add("Authorization", "Basic " + keyb64)
+
+    client := &http.Client{}
+    res, err := client.Do(req)
+    if err != nil {
+        return nil, err
+    }
+    defer res.Body.Close()
+
+    if res.StatusCode == 404 {
+        return nil, fmt.Errorf("not found")
+    } else if res.StatusCode >= 400 {
+        body, _ := io.ReadAll(res.Body)
+        return nil, fmt.Errorf("HTTP error %d: %s", res.StatusCode, string(body))
+    }
+
+    var result PhoenixLookupInvoiceResult
+    if err := json.NewDecoder(res.Body).Decode(&result); err != nil {
+        return nil, err
+    }
+
+    return &result, nil
 }
 
-func (b *PhoenixBackend) lookupPayment(direction, paymentHash string) (*PhoenixLookupInvoiceResult, error) {
+func (b *PhoenixBackend) lookupOutgoingInvoice(paymentHash string) (*PhoenixLookupInvoiceResult, error) {
     client := &http.Client{}
-    req, err := http.NewRequest("GET", "http://"+b.Host+"/payments/"+direction, nil)
+    req, err := http.NewRequest("GET", "http://"+b.Host+"/payments/outgoing", nil)
     if err != nil {
         return nil, err
     }
@@ -255,6 +280,7 @@ func (b *PhoenixBackend) lookupPayment(direction, paymentHash string) (*PhoenixL
     // Not found
     return nil, nil
 }
+
 
 func (b *PhoenixBackend) makeInvoice(params Nip47InvoiceParams) (*PhoenixInvoiceResult, error) {
 	payload := url.Values{}
@@ -543,8 +569,6 @@ func (b *PhoenixBackend) HandleLookupInvoice(ctx context.Context, nip47req Nip47
 	} else {
 		paymentHash = params.PaymentHash
 	}
-
-	// TODO include a lookup for outgoing payments
 
 	result, err := b.lookupInvoice(paymentHash)
 
